@@ -1,0 +1,25 @@
+version: '3.1'
+services:
+  db:
+    container_name: db
+    image: mysql
+    command: --default-authentication-plugin=caching_sha2_password
+    restart: always
+    env_file:
+      - .env
+    ports:
+      - 3306:3306
+    volumes:
+      - ./mysql_data:/var/lib/mysql
+
+  web:
+    container_name: bogo-bots
+    build: .
+    volumes:
+      - .:/app/BogoBots
+    ports:
+      - 8601:8601
+    depends_on:
+      - db
+    env_file:
+      - .env
