@@ -10,12 +10,14 @@ available_models = [
             {
                 'display_name': 'GPT-4o',
                 'api_name': 'gpt-4o-2024-05-13',
-                'is_free': False
+                'is_free': False,
+                'native_tool_support': True,
             },
             {
                 'display_name': 'GPT-4 Turbo 2024-04-09',
                 'api_name': 'gpt-4-turbo',
-                'is_free': False
+                'is_free': False,
+                'native_tool_support': True,
             }
         ]
     },
@@ -29,7 +31,8 @@ available_models = [
             {
                 'display_name': 'Llama 3 8B Instruct (free)',
                 'api_name': 'llama-3-8b-instruct:free',
-                'is_free': True
+                'is_free': True,
+                'native_tool_support': False,
             },
         ]
     },
@@ -43,7 +46,8 @@ available_models = [
             {
                 'display_name': 'Gemma 7B Instruct (free)',
                 'api_name': 'gemma-7b-it:free',
-                'is_free': True
+                'is_free': True,
+                'native_tool_support': False,
             },
         ]
     },
