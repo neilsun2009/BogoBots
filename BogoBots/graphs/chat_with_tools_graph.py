@@ -9,7 +9,6 @@ from langchain_core.prompts import ChatPromptTemplate
 from langgraph.graph import END, StateGraph
 from langgraph.prebuilt.tool_node import ToolNode
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 from BogoBots.utils.langchain import wrap_ad_hoc_tool_agent
 
 def add_messages(left: list, right: list):

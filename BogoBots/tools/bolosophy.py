@@ -13,7 +13,7 @@ class BolosophyInput(BaseModel):
     query: str = Field(description="search query string")
     num_entries: Optional[int] = Field(description="maximum number of knowledge base entries to return",
                              gt=0,
-                             lt=10,
+                             lte=10,
                              default=5)
 
 

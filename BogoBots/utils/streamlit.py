@@ -3,11 +3,10 @@ import inspect
 from typing import Callable, TypeVar
 from streamlit.runtime.scriptrunner import add_script_run_ctx, get_script_run_ctx
 from streamlit.delta_generator import DeltaGenerator
-from langchain_community.callbacks import StreamlitCallbackHandler
 
 T = TypeVar('T')
 
-def get_streamlit_cb(**kwargs):
+def get_streamlit_cb(cb, **kwargs):
     def decor(fn: Callable[..., T]) -> Callable[..., T]:
         ctx = get_script_run_ctx()
         def wrapper(*args, **kwargs) -> T:
@@ -15,7 +14,7 @@ def get_streamlit_cb(**kwargs):
             return fn(*args, **kwargs)
         return wrapper
 
-    st_cb = StreamlitCallbackHandler(**kwargs)
+    st_cb = cb(**kwargs)
 
     for name, fn in inspect.getmembers(st_cb, predicate=inspect.ismethod):
         if name.startswith('on_'):

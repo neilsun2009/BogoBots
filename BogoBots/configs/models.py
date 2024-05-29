@@ -34,6 +34,12 @@ available_models = [
                 'is_free': True,
                 'native_tool_support': False,
             },
+            {
+                'display_name': 'Llama 3 70B Instruct',
+                'api_name': 'llama-3-70b-instruct',
+                'is_free': False,
+                'native_tool_support': False,
+            },
         ]
     },
     {
@@ -47,6 +53,24 @@ available_models = [
                 'display_name': 'Gemma 7B Instruct (free)',
                 'api_name': 'gemma-7b-it:free',
                 'is_free': True,
+                'native_tool_support': False,
+            },
+            {
+                'display_name': 'Gemini Flash 1.5',
+                'api_name': 'gemini-flash-1.5',
+                'is_free': False,
+                'native_tool_support': True,
+            },
+            {
+                'display_name': 'Gemini Pro 1.5',
+                'api_name': 'gemini-pro-1.5',
+                'is_free': False,
+                'native_tool_support': True,
+            },
+            {
+                'display_name': 'Gemini Pro 1.0',
+                'api_name': 'gemini-pro',
+                'is_free': False,
                 'native_tool_support': False,
             },
         ]

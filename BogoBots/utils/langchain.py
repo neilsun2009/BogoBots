@@ -4,7 +4,6 @@ import sys
 from langchain_core.tools import render_text_description
 from langchain_core.prompts import ChatPromptTemplate
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 from BogoBots.parsers.ad_hoc_tool_parser import ad_hoc_tool_parser
 
 def get_messages_from_checkpoint_tuple(checkpoint_tuple):
@@ -39,7 +38,8 @@ to the argument names and the values corresponding to the requested values.
 
 3. If no tool is required, just return however you like.
 
-Please note again, that you should only return a JSON blob if you decide to use a tool, any other character is not needed.
+Please note again: IF YOU DECIDE TO USE A TOOL, you should only return a JSON blob, any other character is not needed;
+OTHERWISE, just use your own words.
 """
     system_prompt = ChatPromptTemplate.from_messages(
         [
