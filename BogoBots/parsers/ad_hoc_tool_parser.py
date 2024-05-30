@@ -25,26 +25,23 @@ def ad_hoc_tool_parser(ai_message: AIMessage) -> AIMessage:
         # parse to a valid tool call response
         response_metadata = ai_message.response_metadata
         response_metadata['finish_reason'] = "tool_calls"
-        return AIMessage(
-            content='',
-            additional_kwargs={
-                'tool_calls': [
-                    {
-                        "function": tool_call,
-                        "id": tool_call['id'],
-                        "type": "function"
-                    } for tool_call in json_content['tool_calls']
-                ]
-            },
-            response_metadata=response_metadata,
-            id=ai_message.id,
-            tool_calls=[
+        ai_message.response_metadata = response_metadata
+        ai_message.additional_kwargs = {
+            'tool_calls': [
                 {
-                    "name": tool_call['name'],
-                    "args": tool_call['arguments'],
-                    "id": tool_call['id']
+                    "function": tool_call,
+                    "id": tool_call['id'],
+                    "type": "function"
                 } for tool_call in json_content['tool_calls']
-            ],
-        )
+            ]
+        }
+        ai_message.tool_calls = [
+            {
+                "name": tool_call['name'],
+                "args": tool_call['arguments'],
+                "id": tool_call['id']
+            } for tool_call in json_content['tool_calls']
+        ]
+        return ai_message
     except Exception as e:
         return ai_message

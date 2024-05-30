@@ -11,13 +11,14 @@ from langchain_openai.chat_models.base import ChatOpenAI
 from langchain_community.callbacks import StreamlitCallbackHandler
 from langgraph.prebuilt import create_react_agent
 from langgraph.checkpoint import MemorySaver
-from langchain_community.callbacks.streamlit.streamlit_callback_handler import StreamlitCallbackHandler
+from langchain_community.callbacks.streamlit.streamlit_callback_handler import LLMThoughtLabeler
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from BogoBots.configs.models import available_models
 from BogoBots.tools.bolosophy import BolosophyTool
-from BogoBots.utils.streamlit import get_streamlit_cb
+from BogoBots.utils.streamlit import get_streamlit_cb, write_token_usage
 from BogoBots.utils.langchain import get_messages_from_checkpoint_tuple
+from BogoBots.utils.llm import get_model_price
 from BogoBots.graphs.chat_with_tools_graph import get_chat_with_tools_graph
 from BogoBots.callbacks.custom_streamlit_callback_handler import CustomStreamlitCallbackHandler
 
@@ -63,14 +64,15 @@ with st.sidebar:
     else:
         st.caption('❗You can also find free models to use!')
     # current_model_container.subheader('✨ Using model')
-    current_model_container.markdown(f'<img src="{model_group["icon"]}" alt="{model["display_name"]}" height="28px"> **{model["display_name"]}**', unsafe_allow_html=True)
-    ambi_api_support = model_group['supports_original_api'] and model_group['supports_open_router']
+    current_model_container.markdown(f'<img src="{model_group["icon"]}" alt="{model["display_name"]}" height="28px">&nbsp;&nbsp;&nbsp;**{model["display_name"]}**', unsafe_allow_html=True)
+    ambi_api_support = model_group['supports_official_api'] and model_group['supports_open_router']
     if ambi_api_support:
-        api_provider = st.radio('Which API to use', horizontal=True, 
-                                options=['Original API', 'OpenRouter'],
+        api_provider = st.radio('Which provider to use', 
+                                horizontal=True, 
+                                options=['Official API', 'OpenRouter'],
                                 help='OpenRouter is an LLM router service. One key for all major LLMs. [learn more](https://openrouter.ai/)')
-    elif model_group['supports_original_api']:
-        api_provider = 'Original API'
+    elif model_group['supports_official_api']:
+        api_provider = 'Official API'
     elif model_group['supports_open_router']:
         api_provider = 'OpenRouter'
     else:
@@ -78,9 +80,9 @@ with st.sidebar:
         st.error(f'No API provider available for {model_group["group"]}.')
     # api key
     use_free_key = False
-    if api_provider == 'Original API':
+    if api_provider == 'Official API':
         api_key = st.text_input(f'{model_group["group"]} API Key', type='password')
-        api_base = model_group['original_api_base']
+        api_base = model_group['official_api_base']
         model_name = model['api_name']
     elif api_provider == 'OpenRouter':
         if model['is_free']:
@@ -95,8 +97,14 @@ with st.sidebar:
         api_key = None
         api_base = None
         model_name = None
-    if not use_free_key:    
-        st.caption('Your API key is safe with us. We won\'t store it or use it outside the scope of your action on this site.')
+    if not use_free_key: 
+        # get model price
+        model_price = get_model_price(model_name if '/' in model_name else f'{model_group["open_router_prefix"]}/{model_name}', 
+                                      api_provider if api_provider == 'OpenRouter' else model_group["group"])   
+        if model_price:
+            detail_str = ', '.join([f'{k} {v}' for k, v in model_price.items()])
+            st.caption(f'💸 {detail_str}')
+        st.caption('🔒 Your API key is safe with us. We won\'t store it or use it outside the scope of your actions on this site.')
     
     # tools
     st.markdown('---')
@@ -108,21 +116,22 @@ with st.sidebar:
         'args': {}
     }]
     if not model['native_tool_support']:
-        st.caption('''
-            🚨 :red[No native tool support for this model!] \n
-            Tools will be used in an ad-hoc manner by means of system message.
-            The performance may be less optimal and is prone to errors. More tokens are also expected.
-        ''')
+        st.caption('🚨 :red[No native tool support for this model!]',
+            help='''Tools will be used in an ad-hoc manner by means of system message.
+                The performance may be less optimal and is prone to errors. More tokens are also expected.
+            ''')
     tools = st.multiselect('Select tools', available_tools, 
                            format_func=lambda x: x['name'],
                            placeholder='Try one or more tools!',
                            label_visibility='collapsed')
     tools = [tool['func'](**tool['args']) for tool in tools]
+    if model['native_tool_support']:  
+        st.caption('✅ Native tool support available!')
             
     # parameters
     st.markdown('---')
     st.subheader('🎰 Parameters')
-    with st.container(height=200):
+    with st.container(height=250):
         temprature = st.slider('temprature', 
                                 min_value=0.,
                                 max_value=2.,
@@ -166,18 +175,19 @@ with st.sidebar:
                                         placeholder='No limit',
                                         help='''The maximum number of tokens that can be generated in the chat completion. 
                                         The total length of input tokens and generated tokens is limited by the model's context length.''')
-        logprobs = st.checkbox('Return log probabilities', 
-                                        value=False,
-                                        help='''Whether to return log probabilities of the output tokens or not. If true, returns the log probabilities of each output token returned.''')
-        if logprobs:
-            top_logprobs = st.number_input('top_logprobs', 
-                                        min_value=0,
-                                        max_value=20,
-                                        value=0,
-                                        placeholder='Don\'t return',
-                                        help='''An integer between 0 and 20 specifying the number of most likely tokens to return at each token position, each with an associated log probability. `logprobs` must be set to `true` if this parameter is used.''')
-        else:
-            top_logprobs = None
+        # currently unusable
+        # logprobs = st.checkbox('Return log probabilities', 
+        #                                 value=False,
+        #                                 help='''Whether to return log probabilities of the output tokens or not. If true, returns the log probabilities of each output token returned.''')
+        # if logprobs:
+        #     top_logprobs = st.number_input('top_logprobs', 
+        #                                 min_value=0,
+        #                                 max_value=20,
+        #                                 value=0,
+        #                                 placeholder='Don\'t return',
+        #                                 help='''An integer between 0 and 20 specifying the number of most likely tokens to return at each token position, each with an associated log probability. `logprobs` must be set to `true` if this parameter is used.''')
+        # else:
+        #     top_logprobs = None
         
 main_placeholder = st.empty()
 main_container = main_placeholder.container()
@@ -190,28 +200,25 @@ else:
     # Display chat messages from history on app rerun
     with main_container:
         msg_container = None
+        msg_labeler = LLMThoughtLabeler()
         for message in get_messages_from_checkpoint_tuple(st.session_state.checkpoint_tuple):
             if isinstance(message, AIMessage):
                 role = 'assistant'
                 avatar = None
-                msg_model_name = message.response_metadata.get('model_name', None)
+                msg_model_name = message.response_metadata.get('model_name', 'Bot')
                 if msg_model_name:
                     avatar = MODEL_NAME_AVATAR_MAP.get(msg_model_name.split('/')[-1], None)
                 # if has tool calls
-                tool_calls = message.tool_calls
-                if len(tool_calls) == 0:
-                    # no tool call in this step
-                    # if msg_container is not None, it means this is the result of tool calls
-                    if msg_container is None:
-                        msg_container = st.chat_message(role, avatar=avatar)
-                    with msg_container:
-                        st.write(message.content)
-                    # revert msg_container to None
-                    msg_container = None
-                else:
-                    # start a new container to display intermediate steps
-                    # and the final message
+                # tool_calls = message.tool_calls
+                if msg_container is None:
                     msg_container = st.chat_message(role, avatar=avatar)
+                with msg_container:
+                    expander = st.expander(f'✅ **{msg_model_name}**', expanded=True)
+                    expander.write(message.content)
+                    if message.tool_calls:
+                        for tool_call in message.tool_calls:
+                            expander.caption(f"🛠️ Tool call: `{tool_call['name']}` with arguments ```{tool_call['args']}```")
+                    write_token_usage(expander, message)
             elif isinstance(message, HumanMessage):
                 role = 'user'
                 msg_container = st.chat_message(role)
@@ -222,7 +229,7 @@ else:
             elif isinstance(message, ToolMessage):
                 # append intermediate step info to the current container
                 with msg_container:
-                    with st.status(message.name, state='complete'):
+                    with st.expander(f'🛠️ **{message.name}**', expanded=True):
                         st.write(message.content)
         
 # React to user input
@@ -262,8 +269,8 @@ if prompt := st.chat_input("What is up?"):
                                 "top_p": top_p,
                                 "frequency_penalty": frequency_penalty,
                                 "presence_penalty": presence_penalty,
-                                "logprobs": logprobs,
-                                "top_logprobs": top_logprobs,
+                                # "logprobs": logprobs,
+                                # "top_logprobs": top_logprobs,
                                 "stream_options": {
                                     "include_usage": True,
                                 }
@@ -271,8 +278,10 @@ if prompt := st.chat_input("What is up?"):
                             streaming=True, 
                             # callbacks=[stream_handler],
                         )
+            # if logprobs:
+            #     llm = llm.bind(logprobs=True)
             # tools = []
-            llm.bind_tools(tools)
+            llm = llm.bind_tools(tools)
             # set memory from session
             memory = MemorySaver()
             if st.session_state.get('checkpoint_tuple', None):
@@ -294,6 +303,7 @@ if prompt := st.chat_input("What is up?"):
                 message.response_metadata['model_name'] = model_name
             # write last message when all intermedite nodes are done
             # msg_container.write(message.content)
+            # write_token_usage(message)
             # update chat history
             checkpoint_tuple = memory.get_tuple(config)
             st.session_state.checkpoint_tuple = checkpoint_tuple

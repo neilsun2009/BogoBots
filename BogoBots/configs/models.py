@@ -1,9 +1,10 @@
 available_models = [
     {
         'group': 'OpenAI',
-        'icon': 'https://openaiapi-site.azureedge.net/public-assets/d/aa8667594c/favicon.png',
-        'supports_original_api': True,
-        'original_api_base': 'https://api.openai.com/v1',
+        # 'icon': 'https://openaiapi-site.azureedge.net/public-assets/d/aa8667594c/favicon.png',
+        'icon': 'https://openai.com/favicon.ico',
+        'supports_official_api': True,
+        'official_api_base': 'https://api.openai.com/v1',
         'supports_open_router': True,
         'open_router_prefix': 'openai',
         'models': [
@@ -24,7 +25,7 @@ available_models = [
     {
         'group': 'Meta Llama',
         'icon': 'https://static.xx.fbcdn.net/rsrc.php/y5/r/m4nf26cLQxS.ico',
-        'supports_original_api': False,
+        'supports_official_api': False,
         'supports_open_router': True,
         'open_router_prefix': 'meta-llama',
         'models': [
@@ -45,7 +46,7 @@ available_models = [
     {
         'group': 'Google',
         'icon': 'https://www.google.com/images/branding/googleg/1x/googleg_standard_color_128dp.png',
-        'supports_original_api': False,
+        'supports_official_api': False,
         'supports_open_router': True,
         'open_router_prefix': 'google',
         'models': [
