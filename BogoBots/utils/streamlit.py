@@ -24,10 +24,10 @@ def get_streamlit_cb(cb, **kwargs):
     return st_cb
         
 def write_token_usage(container, message):
-    usage = message.usage_metadata
-    usage_str = f"""input {usage['input_tokens']} |
-        output {usage['output_tokens']} |
-        total {usage['total_tokens']} tkns"""
-    # use markdown to be compatible to langchain streamlit handler
-    container.markdown(f'<p style="color: rgb(163, 168, 184); font-size: 14px;">{usage_str}</p>',
-                       unsafe_allow_html=True)
+    if usage := message.usage_metadata:
+        usage_str = f"""input {usage['input_tokens']} |
+            output {usage['output_tokens']} |
+            total {usage['total_tokens']} tkns"""
+        # use markdown to be compatible to langchain streamlit handler
+        container.markdown(f'<p style="color: rgb(163, 168, 184); font-size: 14px;">{usage_str}</p>',
+                        unsafe_allow_html=True)

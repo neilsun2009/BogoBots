@@ -8,6 +8,11 @@ from langchain_core.callbacks import (
     CallbackManagerForToolRun,
 )
 from langchain_core.tools import BaseTool, ToolException
+from langchain_huggingface.embeddings import HuggingFaceEndpointEmbeddings
+from langchain_milvus.vectorstores import Zilliz
+import streamlit as st
+
+from BogoBots.utils.langchain import get_zilliz_vectorstore
 
 class BolosophyInput(BaseModel):
     query: str = Field(description="search query string")
@@ -27,17 +32,26 @@ class BolosophyTool(BaseTool):
         self, query: str, num_entries: Optional[int] = 5, run_manager: Optional[CallbackManagerForToolRun] = None
     ) -> str:
         """Use the tool."""
-        try:
-            response = requests.get(f"http://127.0.0.1:8000/query?q={query}&num_entries={num_entries}", headers={'Content-Type': 'application/json'})
-        except Exception as e:
-            raise ToolException(f"Request to Bolosophy failed with error: {str(e)}")
+        # try:
+        #     response = requests.get(f"http://0.0.0.0:8000/query?q={query}&num_entries={num_entries}", headers={'Content-Type': 'application/json'})
+        # except Exception as e:
+        #     raise ToolException(f"Request to Bolosophy failed with error: {str(e)}")
 
-        json_response = response.json()
-        # print("bogology results:", json_response)
-        if response.status_code != 200:
-            raise ToolException(f"Request Bolosophy failed with status {response.status_code}: {json_response['error']['message']}")
+        # json_response = response.json()
+        # # print("bogology results:", json_response)
+        # if response.status_code != 200:
+        #     raise ToolException(f"Request Bolosophy failed with status {response.status_code}: {json_response['error']['message']}")
 
-        return json.dumps(json_response, ensure_ascii=False)
+        # return json.dumps(json_response, ensure_ascii=False)
+
+        vectorstore = get_zilliz_vectorstore()
+        print('Bolosophy test with query:', query)
+        # retriever = vectorstore.as_retriever()
+        retriever = vectorstore.as_retriever(search_kwargs={"k": num_entries})
+        docs = retriever.invoke(query)
+        print(f'{len(docs)} results retrieved')
+        result = {'query_results': [doc.page_content for doc in docs]}
+        return json.dumps(result, ensure_ascii=False)
 
 if __name__ == '__main__':
     tool = BolosophyTool()

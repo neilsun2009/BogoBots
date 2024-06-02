@@ -483,7 +483,7 @@ class BaseChatOpenAI(BaseChatModel):
             for chunk in response:
                 if not isinstance(chunk, dict):
                     chunk = chunk.model_dump()
-                print("CHUNK", chunk)
+                # print("CHUNK", chunk)
                 if len(chunk["choices"]) == 0:
                     if token_usage := chunk.get("usage"):
                         usage_metadata = UsageMetadata(
@@ -525,7 +525,7 @@ class BaseChatOpenAI(BaseChatModel):
                     chunk = ChatGenerationChunk(
                         message=chunk, generation_info=generation_info or None
                     )
-                    print("PARSED CHUNK", chunk)
+                    # print("PARSED CHUNK", chunk)
                 if run_manager:
                     run_manager.on_llm_new_token(
                         chunk.text, chunk=chunk, logprobs=logprobs

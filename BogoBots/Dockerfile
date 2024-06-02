@@ -1,4 +1,4 @@
-FROM python:3.9-slim
+FROM python:3.12-slim
 
 WORKDIR /app/BogoBots
 
@@ -14,7 +14,9 @@ COPY . /app/BogoBots
 
 RUN pip3 install -r requirements.txt
 
-EXPOSE 8501
+COPY backup_openai_chat_models_base.py /usr/local/lib/python3.12/site-packages/langchain_openai/chat_models/base.py
+
+EXPOSE 8601
 
 HEALTHCHECK CMD curl --fail http://localhost:8601/_stcore/health
 
