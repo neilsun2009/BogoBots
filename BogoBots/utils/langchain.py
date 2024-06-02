@@ -66,6 +66,8 @@ to the argument names and the values corresponding to the requested values.
 
 Please note again: IF YOU DECIDE TO USE A TOOL, you should only return a JSON blob, any other character is not needed;
 OTHERWISE, just use your own words.
+
+Also, after the tool returns, you should just render the tool's output by means you see fit, DON'T RECALL THE TOOL BY ANOTHER JSON.
 """
     system_prompt = ChatPromptTemplate.from_messages(
         [

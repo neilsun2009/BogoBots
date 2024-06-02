@@ -16,20 +16,24 @@ from BogoBots.utils.langchain import get_zilliz_vectorstore
 
 class BolosophyInput(BaseModel):
     query: str = Field(description="search query string")
-    num_entries: Optional[int] = Field(description="maximum number of knowledge base entries to return",
-                             gt=0,
-                             lte=10,
-                             default=5)
 
 
 class BolosophyTool(BaseTool):
     name = "Bolosophy"
     description = "A local knowledge base constructed by Bogo, containing book notes, personal thoughts formulated by him. Useful for when you are asked to search Bogo\'s knowledge base or to answer questions about some professional topics you have no knowledge of"
     args_schema: Type[BaseModel] = BolosophyInput
-    return_direct: bool = True
+    return_direct: bool = False
+    
+    emoji: str = "📚"
+    vectorstore: Zilliz = None
+    num_entries: int = 5
+    
+    def __init__(self):
+        super().__init__()
+        self.vectorstore = get_zilliz_vectorstore()
 
     def _run(
-        self, query: str, num_entries: Optional[int] = 5, run_manager: Optional[CallbackManagerForToolRun] = None
+        self, query: str, run_manager: Optional[CallbackManagerForToolRun] = None
     ) -> str:
         """Use the tool."""
         # try:
@@ -44,14 +48,23 @@ class BolosophyTool(BaseTool):
 
         # return json.dumps(json_response, ensure_ascii=False)
 
-        vectorstore = get_zilliz_vectorstore()
+        # self.vectorstore = get_zilliz_vectorstore()
         print('Bolosophy test with query:', query)
         # retriever = vectorstore.as_retriever()
-        retriever = vectorstore.as_retriever(search_kwargs={"k": num_entries})
+        retriever = self.vectorstore.as_retriever(search_kwargs={"k": self.num_entries})
         docs = retriever.invoke(query)
         print(f'{len(docs)} results retrieved')
         result = {'query_results': [doc.page_content for doc in docs]}
         return json.dumps(result, ensure_ascii=False)
+    
+    def st_config(self):
+        """config setting in streamlit"""
+        self.num_entries = st.slider('Number of entries', 
+                            min_value=1,
+                            max_value=10,
+                            step=1,
+                            value=5,
+                            help='''Maximum number of knowledge base entries to return.''')
 
 if __name__ == '__main__':
     tool = BolosophyTool()

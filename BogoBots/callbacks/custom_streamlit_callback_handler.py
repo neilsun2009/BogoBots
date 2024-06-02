@@ -12,7 +12,7 @@ class CustomStreamlitCallbackHandler(StreamlitCallbackHandler):
         super().__init__(*args, **kwargs)
         
     def on_llm_end(self, response: LLMResult, **kwargs: Any) -> None:
-        print('LLM END RESPOSNE', response, kwargs)
+        print('LLM END RESPOSNE', response, kwargs, flush=True)
         super().on_llm_end(response, **kwargs)
         # self._require_current_thought().on_llm_end(response, **kwargs)
         # self._prune_old_thought_containers()
@@ -34,8 +34,17 @@ class CustomStreamlitCallbackHandler(StreamlitCallbackHandler):
     def on_llm_start(
         self, serialized: Dict[str, Any], prompts: List[str], **kwargs: Any
     ) -> None:
-        print('LLM START SERIALIZED', serialized, prompts, kwargs)
+        print('LLM START SERIALIZED', serialized, prompts, kwargs, flush=True)
+        # if self._current_thought is None:
+        #     self._current_thought = LLMThought(
+        #         parent_container=self._parent_container,
+        #         expanded=self._expand_new_thoughts,
+        #         collapse_on_complete=self._collapse_completed_thoughts,
+        #         labeler=self._thought_labeler,
+        #     )
         super().on_llm_start(serialized, prompts, **kwargs)
+        # use this place holder to show the thinking container immediately
+        self._require_current_thought().container.markdown('')
         
     def on_agent_finish(
         self, finish: AgentFinish, color: Optional[str] = None, **kwargs: Any

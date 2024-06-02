@@ -16,6 +16,7 @@ from langchain_community.callbacks.streamlit.streamlit_callback_handler import L
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from BogoBots.configs.models import available_models
 from BogoBots.tools.bolosophy import BolosophyTool
+from BogoBots.tools.draw import DrawTool
 from BogoBots.utils.streamlit import get_streamlit_cb, write_token_usage
 from BogoBots.utils.langchain import get_messages_from_checkpoint_tuple
 from BogoBots.utils.llm import get_model_price
@@ -108,26 +109,25 @@ with st.sidebar:
     
     # tools
     st.markdown('---')
-    st.subheader('🛠️ Select tools')
-    available_tools = [{
-        'name': 'Bolosophy',
-        'description': 'A knowledge base by Bogo, containing book notes and personal thoughts.',
-        'func': BolosophyTool,
-        'args': {}
-    }]
+    st.subheader('🛠️ Use tools')
+    available_tools = [
+        BolosophyTool(), 
+        DrawTool()
+    ]
     if not model['native_tool_support']:
         st.caption('🚨 :red[No native tool support for this model!]',
             help='''Tools will be used in an ad-hoc manner by means of system message.
                 The performance may be less optimal and is prone to errors. More tokens are also expected.
             ''')
-    tools = st.multiselect('Select tools', available_tools, 
-                           format_func=lambda x: x['name'],
-                           placeholder='Try one or more tools!',
-                           label_visibility='collapsed')
-    tools = [tool['func'](**tool['args']) for tool in tools]
-    if model['native_tool_support']:  
-        st.caption('✅ Native tool support available!')
-            
+    # else:
+    #     st.caption('✅ Native tool support available!')
+    tools = []
+    for tool in available_tools:
+        use_cur_tool = st.checkbox(f'{tool.emoji} {tool.name}', help=tool.description)
+        if use_cur_tool:
+            tools.append(tool)
+            tool.st_config()
+        
     # parameters
     st.markdown('---')
     st.subheader('🎰 Parameters')
@@ -200,8 +200,9 @@ else:
     # Display chat messages from history on app rerun
     with main_container:
         msg_container = None
-        msg_labeler = LLMThoughtLabeler()
-        for message in get_messages_from_checkpoint_tuple(st.session_state.checkpoint_tuple):
+        messages = get_messages_from_checkpoint_tuple(st.session_state.checkpoint_tuple)
+        for idx, message in enumerate(messages):
+            expanded = (idx == len(messages)-1)
             if isinstance(message, AIMessage):
                 role = 'assistant'
                 avatar = None
@@ -213,7 +214,7 @@ else:
                 if msg_container is None:
                     msg_container = st.chat_message(role, avatar=avatar)
                 with msg_container:
-                    expander = st.expander(f'✅ **{msg_model_name}**', expanded=True)
+                    expander = st.expander(f'✅ **{msg_model_name}**', expanded=expanded)
                     expander.write(message.content)
                     if message.tool_calls:
                         for tool_call in message.tool_calls:
@@ -229,7 +230,7 @@ else:
             elif isinstance(message, ToolMessage):
                 # append intermediate step info to the current container
                 with msg_container:
-                    with st.expander(f'🛠️ **{message.name}**', expanded=True):
+                    with st.expander(f'🛠️ **{message.name}**', expanded=expanded):
                         st.write(message.content)
         
 # React to user input
