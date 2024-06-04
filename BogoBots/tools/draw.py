@@ -76,6 +76,12 @@ class DrawTool(BaseTool):
                             [
                                 "sd-community/sdxl-flash", 
                                 "stabilityai/stable-diffusion-2-1",
+                                "stabilityai/stable-diffusion-xl-base-1.0",
+                                "Corcelio/mobius",
+                                "RunDiffusion/Juggernaut-XL-Lightning",
+                                "RunDiffusion/Juggernaut-XL-v9",
+                                "RunDiffusion/Juggernaut-X-Hyper",
+                                "RunDiffusion/Juggernaut-XL-Lightning",
                             ],
                             help='The model to use for image generation.')
 

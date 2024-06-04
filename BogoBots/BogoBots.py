@@ -20,6 +20,7 @@ from BogoBots.tools.draw import DrawTool
 from BogoBots.utils.streamlit import get_streamlit_cb, write_token_usage
 from BogoBots.utils.langchain import get_messages_from_checkpoint_tuple
 from BogoBots.utils.llm import get_model_price
+from BogoBots.utils.router import render_toc_with_expander
 from BogoBots.graphs.chat_with_tools_graph import get_chat_with_tools_graph
 from BogoBots.callbacks.custom_streamlit_callback_handler import CustomStreamlitCallbackHandler
 
@@ -49,13 +50,11 @@ if "checkpoint_tuple" not in st.session_state:
 with st.sidebar:
     # new chat
     # st.markdown('---')
-    st.title('🎭BogoBots')
+    render_toc_with_expander()
+    st.title('🎭BogoChat')
     # st.markdown('A chatbot assistant designed by Bogo.')
     st.button('New chat', on_click=clear_history)
-    st.markdown('---')
-    
     # model selection
-    current_model_container = st.container()
     with st.popover('Switch model'):
         model_group = st.selectbox('Select model group', available_models, format_func=lambda x: x['group'])
         model = st.selectbox('Select model', model_group['models'], 
@@ -63,9 +62,15 @@ with st.sidebar:
     if model['is_free']:
         st.caption(' 🎉 Free model at your service!')
     else:
-        st.caption('❗You can also find free models to use!')
+        st.caption('❗Why not try a free model?')
+    
+    st.markdown('---')
+    
+    # current_model_container = st.container()
     # current_model_container.subheader('✨ Using model')
-    current_model_container.markdown(f'<img src="{model_group["icon"]}" alt="{model["display_name"]}" height="28px">&nbsp;&nbsp;&nbsp;**{model["display_name"]}**', unsafe_allow_html=True)
+    st.markdown(f'<img src="{model_group["icon"]}" alt="{model["display_name"]}" height="28px">&nbsp;&nbsp;&nbsp;**{model["display_name"]}**', unsafe_allow_html=True)
+    
+    # select api provider
     ambi_api_support = model_group['supports_official_api'] and model_group['supports_open_router']
     if ambi_api_support:
         api_provider = st.radio('Which provider to use', 
@@ -79,6 +84,13 @@ with st.sidebar:
     else:
         api_provider = None
         st.error(f'No API provider available for {model_group["group"]}.')
+    # get model price
+    model_price = get_model_price(f'{model_group["open_router_prefix"]}/{model["api_name"]}', 
+                                    api_provider if api_provider == 'OpenRouter' else model_group["group"])   
+    if model_price:
+        detail_str = ', '.join([f'{k} {v}' for k, v in model_price.items()])
+        # st.caption(detail_str)
+        st.caption(f'💸 {detail_str}')
     # api key
     use_free_key = False
     if api_provider == 'Official API':
@@ -99,13 +111,8 @@ with st.sidebar:
         api_base = None
         model_name = None
     if not use_free_key: 
-        # get model price
-        model_price = get_model_price(model_name if '/' in model_name else f'{model_group["open_router_prefix"]}/{model_name}', 
-                                      api_provider if api_provider == 'OpenRouter' else model_group["group"])   
-        if model_price:
-            detail_str = ', '.join([f'{k} {v}' for k, v in model_price.items()])
-            st.caption(f'💸 {detail_str}')
         st.caption('🔒 Your API key is safe with us. We won\'t store it or use it outside the scope of your actions on this site.')
+    
     
     # tools
     st.markdown('---')
