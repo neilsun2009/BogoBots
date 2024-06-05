@@ -10,9 +10,9 @@ PAGES = [
         "access": access_level['visitor'],
     },
     {
-        "label": "Knowledge Retriever",
+        "label": "Retriever #42",
         "icon": "👓",
-        "link": "pages/knowledge_retriever.py",
+        "link": "pages/retriever_42.py",
         "access": access_level['visitor'],
     },
     {

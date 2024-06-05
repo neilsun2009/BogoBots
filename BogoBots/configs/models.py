@@ -1,10 +1,10 @@
 available_models = [
     {
         'group': 'OpenAI',
-        # 'icon': 'https://openaiapi-site.azureedge.net/public-assets/d/aa8667594c/favicon.png',
         'icon': 'https://openai.com/favicon.ico',
         'supports_official_api': True,
         'official_api_base': 'https://api.openai.com/v1',
+        'official_api_link': 'https://openai.com/api/',
         'supports_open_router': True,
         'open_router_prefix': 'openai',
         'models': [
@@ -20,6 +20,82 @@ available_models = [
                 'is_free': False,
                 'native_tool_support': True,
             }
+        ]
+    },
+    {
+        'group': 'Qwen',
+        'icon': 'https://img.alicdn.com/imgextra/i4/O1CN01FOwagl1XBpyVA2QVy_!!6000000002886-2-tps-512-512.png',
+        'supports_official_api': True,
+        'official_api_base': 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+        'official_api_link': 'https://bailian.console.aliyun.com/',
+        'supports_open_router': False,
+        'open_router_prefix': 'qwen',
+        'models': [
+            {
+                'display_name': 'Qwen2.5 Max 0428',
+                'api_name': 'qwen-max-0428',
+                'is_free': False,
+                'native_tool_support': True,
+            },
+            {
+                'display_name': 'Qwen Plus',
+                'api_name': 'qwen-plus',
+                'is_free': False,
+                'native_tool_support': True,
+            },
+            {
+                'display_name': 'Qwen Turbo',
+                'api_name': 'qwen-turbo',
+                'is_free': False,
+                'native_tool_support': True,
+            },
+            {
+                'display_name': 'Qwen Long',
+                'api_name': 'qwen-long',
+                'is_free': False,
+                'native_tool_support': False,
+            },
+        ]
+    },
+    {
+        'group': 'Qwen Open Source',
+        'icon': 'https://img.alicdn.com/imgextra/i4/O1CN01FOwagl1XBpyVA2QVy_!!6000000002886-2-tps-512-512.png',
+        'supports_official_api': True,
+        'official_api_base': 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+        'official_api_link': 'https://bailian.console.aliyun.com/',
+        'supports_open_router': False,
+        'open_router_prefix': 'qwen',
+        'models': [
+            {
+                'display_name': 'Qwen1.5 110B Chat',
+                'api_name': 'qwen1.5-110b-chat',
+                'is_free': False,
+                'native_tool_support': False,
+            },
+            {
+                'display_name': 'Qwen1.5 72B Chat',
+                'api_name': 'qwen1.5-72b-chat',
+                'is_free': False,
+                'native_tool_support': False,
+            },
+            {
+                'display_name': 'Qwen1.5 32B Chat',
+                'api_name': 'qwen1.5-32b-chat',
+                'is_free': False,
+                'native_tool_support': False,
+            },
+            {
+                'display_name': 'Qwen1.5 14B Chat',
+                'api_name': 'qwen1.5-14b-chat',
+                'is_free': False,
+                'native_tool_support': False,
+            },
+            {
+                'display_name': 'Qwen1.5 7B Chat',
+                'api_name': 'qwen1.5-7b-chat',
+                'is_free': False,
+                'native_tool_support': False,
+            },
         ]
     },
     {
@@ -44,6 +120,33 @@ available_models = [
         ]
     },
     {
+        'group': 'Anthropic',
+        'icon': 'https://www.anthropic.com/images/icons/apple-touch-icon.png',
+        'supports_official_api': False,
+        'supports_open_router': True,
+        'open_router_prefix': 'anthropic',
+        'models': [
+            {
+                'display_name': 'Claude 3 Opus',
+                'api_name': 'claude-3-opus',
+                'is_free': False,
+                'native_tool_support': True,
+            },
+            {
+                'display_name': 'Claude 3 Sonnet',
+                'api_name': 'claude-3-sonnet',
+                'is_free': False,
+                'native_tool_support': True,
+            },
+            {
+                'display_name': 'Claude 3 Haiku',
+                'api_name': 'claude-3-haiku',
+                'is_free': False,
+                'native_tool_support': True,
+            },
+        ]
+    },
+    {
         'group': 'Google',
         'icon': 'https://www.google.com/images/branding/googleg/1x/googleg_standard_color_128dp.png',
         'supports_official_api': False,
@@ -57,14 +160,14 @@ available_models = [
                 'native_tool_support': False,
             },
             {
-                'display_name': 'Gemini Flash 1.5',
-                'api_name': 'gemini-flash-1.5',
+                'display_name': 'Gemini Pro 1.5',
+                'api_name': 'gemini-pro-1.5',
                 'is_free': False,
                 'native_tool_support': True,
             },
             {
-                'display_name': 'Gemini Pro 1.5',
-                'api_name': 'gemini-pro-1.5',
+                'display_name': 'Gemini Flash 1.5',
+                'api_name': 'gemini-flash-1.5',
                 'is_free': False,
                 'native_tool_support': True,
             },

@@ -29,5 +29,13 @@ def get_model_price(model_name, provider):
             }
             if float(price_dict['image']) > 0:
                 result['image'] = f"\\${float(price_dict['image'])*1000:.2f}/K imgs"
+            if provider == 'OpenRouter':
+                result['your credit'] = '[link](https://openrouter.ai/credits)'
             return result
         return None
+    elif provider in ['Qwen', 'Qwen Open Source']:
+        # TODO: get data from Qwen API
+        return {
+            'Price detail': '[link](https://dashscope.console.aliyun.com/billing)',
+            'your billing': '[link](https://usercenter2.aliyun.com/home)',
+        }

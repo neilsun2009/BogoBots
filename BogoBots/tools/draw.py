@@ -56,7 +56,8 @@ class DrawTool(BaseTool):
         random_id = uuid.uuid4().hex[:6]
         save_path = f'static/{timestamp}_{random_id}.png'
         image.save(save_path)
-        return json.dumps({'img_url': f'app/{save_path}'}, ensure_ascii=False)
+        return f'The image is generated using prompt: \n\n```\n{prompt}\n```\n\n ![image](app/{save_path})'
+        # return json.dumps({'img_url': f'app/{save_path}'}, ensure_ascii=False)
 
     def st_config(self):
         """config setting in streamlit"""

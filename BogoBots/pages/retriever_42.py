@@ -7,7 +7,7 @@ from BogoBots.utils.router import render_toc
 from BogoBots.utils.langchain import get_zilliz_vectorstore
 
 st.set_page_config(
-    page_title='Knowledge Retriever | BogoBots', 
+    page_title='Retriever #42 | BogoBots', 
     page_icon='👓'
 )
 
@@ -23,12 +23,12 @@ def retrieve(query, top_k=5):
         docs.append(doc)
     return docs
 
-st.header('👓Knowledge Retriever')
+st.title('👓Retriever #42')
 
 st.write('Retrieves knowledge from Bogo\'s knowledge base.')
 
 with st.form('query_form'):
-    query = st.text_input('Query')
+    query = st.text_input('Query', placeholder='Your ultimate question...')
     top_k = st.slider('Top K', value=10, min_value=1, max_value=20)
     # score_threshold = st.slider('Score Threshold', value=0.5, min_value=0.0, max_value=1.0, step=0.01)
     st.form_submit_button('Submit')

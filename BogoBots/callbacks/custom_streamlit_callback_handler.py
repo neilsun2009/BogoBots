@@ -9,10 +9,14 @@ from BogoBots.utils.streamlit import write_token_usage
 class CustomStreamlitCallbackHandler(StreamlitCallbackHandler):
     
     def __init__(self, *args, **kwargs):
+        self.streaming = True
         super().__init__(*args, **kwargs)
         
     def on_llm_end(self, response: LLMResult, **kwargs: Any) -> None:
         print('LLM END RESPOSNE', response, kwargs, flush=True)
+        if not self.streaming:
+            # if streaming mode is off, write result here
+            super().on_llm_new_token(response.generations[0][0].message.content, **kwargs)
         super().on_llm_end(response, **kwargs)
         # self._require_current_thought().on_llm_end(response, **kwargs)
         # self._prune_old_thought_containers()
@@ -43,6 +47,8 @@ class CustomStreamlitCallbackHandler(StreamlitCallbackHandler):
         #         labeler=self._thought_labeler,
         #     )
         super().on_llm_start(serialized, prompts, **kwargs)
+        # detect whether streaming mode is on
+        self.streaming = serialized.get('kwargs', {}).get('streaming', False)
         # use this place holder to show the thinking container immediately
         self._require_current_thought().container.markdown('')
         
@@ -69,6 +75,8 @@ class CustomStreamlitCallbackHandler(StreamlitCallbackHandler):
                 labeler=self._thought_labeler,
             )
         super().on_tool_start(serialized, input_str, **kwargs)
+        # use this place holder to show the thinking container immediately
+        self._require_current_thought().container.markdown('')
     
     def on_tool_end(
         self,
@@ -79,4 +87,7 @@ class CustomStreamlitCallbackHandler(StreamlitCallbackHandler):
         **kwargs: Any,
     ) -> None:
         print('TOOL END', output, color, observation_prefix, llm_prefix, kwargs)
-        super().on_tool_end(output, color, observation_prefix, llm_prefix, **kwargs)
+        # super().on_tool_end(output, color, observation_prefix, llm_prefix, **kwargs)
+        output = str(output)
+        self._require_current_thought().container.markdown(output)
+        self._complete_current_thought()

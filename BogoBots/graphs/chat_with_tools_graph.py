@@ -23,6 +23,7 @@ class Assistant:
         self.runnable = runnable
 
     def __call__(self, state: State, config: RunnableConfig):
+        print("Assistant state:", state, flush=True)
         result = self.runnable.invoke(state)
         return {"messages": [result]}
 
@@ -41,7 +42,8 @@ def get_chat_with_tools_graph(llm, tools, memory, use_ad_hoc_tool_agent=False):
     # Define a new graph
     graph = StateGraph(State)
 
-    llm = llm.bind_tools(tools)
+    if len(tools) > 0:
+        llm = llm.bind_tools(tools)
     if use_ad_hoc_tool_agent:
         llm = wrap_ad_hoc_tool_agent(llm, tools)
     else:

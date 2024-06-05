@@ -25,6 +25,7 @@ from BogoBots.graphs.chat_with_tools_graph import get_chat_with_tools_graph
 from BogoBots.callbacks.custom_streamlit_callback_handler import CustomStreamlitCallbackHandler
 
 OPEN_ROUTER_API_BASE = 'https://openrouter.ai/api/v1'
+OPEN_ROUTER_API_LINK = 'https://openrouter.ai/keys'
 
 MODEL_NAME_AVATAR_MAP = {}
 
@@ -94,7 +95,8 @@ with st.sidebar:
     # api key
     use_free_key = False
     if api_provider == 'Official API':
-        api_key = st.text_input(f'{model_group["group"]} API Key', type='password')
+        api_key = st.text_input(f'{model_group["group"]} API Key', type='password',
+                                help=f'Get your API key from {model_group["official_api_link"]}')
         api_base = model_group['official_api_base']
         model_name = model['api_name']
     elif api_provider == 'OpenRouter':
@@ -103,7 +105,8 @@ with st.sidebar:
         if use_free_key:
             api_key = st.secrets['free_open_router_key']
         else:
-            api_key = st.text_input('OpenRouter API Key', type='password')
+            api_key = st.text_input('OpenRouter API Key', type='password',
+                                    help=f'Get your API key from {model_group["official_api_link"]}')
         api_base = OPEN_ROUTER_API_BASE
         model_name = f"{model_group['open_router_prefix']}/{model['api_name']}"
     else:
@@ -153,7 +156,7 @@ with st.sidebar:
                             min_value=0.,
                             max_value=1.,
                             step=0.1,
-                            value=1.,
+                            value=0.999,
                             format='%.1f',
                             help='''An alternative to sampling with temperature, called nucleus sampling, 
                             where the model considers the results of the tokens with top_p probability mass. 
@@ -268,28 +271,34 @@ if prompt := st.chat_input("What is up?"):
                 "configurable": {"thread_id": "thread-1"},
                 "callbacks": [stream_handler],
             }
+            streaming = True
+            if model_group['group'] == 'Qwen' and len(tools):
+                # qwen doesn't support streaming when using tools
+                streaming = False
+            model_kwargs = {
+                "top_p": top_p,
+                "frequency_penalty": frequency_penalty,
+                "presence_penalty": presence_penalty,
+                # "logprobs": logprobs,
+                # "top_logprobs": top_logprobs,
+            }
+            if streaming:
+                model_kwargs['stream_options'] = {
+                    "include_usage": True,
+                }
             llm = ChatOpenAI(openai_api_base=api_base,
                             openai_api_key=api_key, 
                             model_name=model_name,
                             max_tokens=max_tokens,
                             temperature=temprature,
-                            model_kwargs={
-                                "top_p": top_p,
-                                "frequency_penalty": frequency_penalty,
-                                "presence_penalty": presence_penalty,
-                                # "logprobs": logprobs,
-                                # "top_logprobs": top_logprobs,
-                                "stream_options": {
-                                    "include_usage": True,
-                                }
-                            },
-                            streaming=True, 
+                            model_kwargs=model_kwargs,
+                            streaming=streaming, 
                             # callbacks=[stream_handler],
                         )
             # if logprobs:
             #     llm = llm.bind(logprobs=True)
-            # tools = []
-            llm = llm.bind_tools(tools)
+            # if len(tools):
+            #     llm = llm.bind_tools(tools)
             # set memory from session
             memory = MemorySaver()
             if st.session_state.get('checkpoint_tuple', None):
@@ -309,6 +318,11 @@ if prompt := st.chat_input("What is up?"):
                 # print(message)
                 # add model name to response metadata
                 message.response_metadata['model_name'] = model_name
+                # if chat response content is empty, replace it with a space
+                # this is to bypass the bug that a None might be sent to llm
+                # and cause an error
+                if not message.content or message.content == '':
+                    message.content = ' '
             # write last message when all intermedite nodes are done
             # msg_container.write(message.content)
             # write_token_usage(message)

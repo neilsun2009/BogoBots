@@ -54,8 +54,13 @@ class BolosophyTool(BaseTool):
         retriever = self.vectorstore.as_retriever(search_kwargs={"k": self.num_entries})
         docs = retriever.invoke(query)
         print(f'{len(docs)} results retrieved')
-        result = {'query_results': [doc.page_content for doc in docs]}
-        return json.dumps(result, ensure_ascii=False)
+        # result = {'query_results': [doc.page_content for doc in docs]}
+        # return json.dumps(result, ensure_ascii=False)
+        if len(docs):
+            result = 'Following are the results from thie query: \n\n' + '\n'.join([f"- {doc.page_content}" for doc in docs])
+        else:
+            result = 'No results found for this query'
+        return result
     
     def st_config(self):
         """config setting in streamlit"""
