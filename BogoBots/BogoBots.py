@@ -96,7 +96,7 @@ with st.sidebar:
     use_free_key = False
     if api_provider == 'Official API':
         api_key = st.text_input(f'{model_group["group"]} API Key', type='password',
-                                help=f'Get your API key from {model_group["official_api_link"]}')
+                                help=f'Get your API key from [link]({model_group["official_api_link"]})')
         api_base = model_group['official_api_base']
         model_name = model['api_name']
     elif api_provider == 'OpenRouter':
@@ -106,7 +106,7 @@ with st.sidebar:
             api_key = st.secrets['free_open_router_key']
         else:
             api_key = st.text_input('OpenRouter API Key', type='password',
-                                    help=f'Get your API key from {model_group["official_api_link"]}')
+                                    help=f'Get your API key from [link]({OPEN_ROUTER_API_LINK})')
         api_base = OPEN_ROUTER_API_BASE
         model_name = f"{model_group['open_router_prefix']}/{model['api_name']}"
     else:
