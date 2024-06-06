@@ -14,6 +14,8 @@ COPY . /app/BogoBots
 
 RUN pip3 install -r requirements.txt
 
+RUN mkdir /app/BogoBots/static
+
 COPY backup_openai_chat_models_base.py /usr/local/lib/python3.12/site-packages/langchain_openai/chat_models/base.py
 
 EXPOSE 8601

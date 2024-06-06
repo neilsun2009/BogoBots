@@ -30,7 +30,7 @@ Should be run under this root dir.
 python scripts/add_booknotes_to_vectorstore.py --file_path=./data/booknotes/haodang2000.txt --book_name="浩荡两千年：中国企业公元前7世纪~1869年"
 ```
 
-### Local development:
+### Local development
 
 Windows not supported, because pymilvus requires running on Unix.
 
@@ -38,7 +38,7 @@ Windows not supported, because pymilvus requires running on Unix.
 streamlit run BogoBots.py
 ```
 
-### Docker development:
+### Docker development
 
 Run without rebuild:
 
@@ -52,8 +52,19 @@ Run with rebuild:
 docker-compose up --build
 ```
 
-### Production:
+### Production
 
 ```cmd
 bash run.sh
+```
+
+### Clean docker WSL
+
+```cmd
+wsl --shutdown
+diskpart
+select vdisk file="C:\Users\neils\AppData\Local\Docker\wsl\data\ext4.vhdx"
+attach vdisk readonly
+compact vdisk
+detach vdisk
 ```

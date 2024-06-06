@@ -136,7 +136,8 @@ with st.sidebar:
         use_cur_tool = st.checkbox(f'{tool.emoji} {tool.name}', help=tool.description)
         if use_cur_tool:
             tools.append(tool)
-            tool.st_config()
+            with st.container(border=True):
+                tool.st_config()
         
     # parameters
     st.markdown('---')

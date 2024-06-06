@@ -20,7 +20,7 @@ class BolosophyInput(BaseModel):
 
 class BolosophyTool(BaseTool):
     name = "Bolosophy"
-    description = "A local knowledge base constructed by Bogo, containing book notes, personal thoughts formulated by him. Useful for when you are asked to search Bogo\'s knowledge base or to answer questions about some professional topics you have no knowledge of"
+    description = "A local knowledge base constructed by Bogo, containing book notes, personal thoughts formulated by him. Useful for when asked to search Bogo\'s knowledge base or to answer questions about some professional topics an LLM have no knowledge of."
     args_schema: Type[BaseModel] = BolosophyInput
     return_direct: bool = False
     
@@ -57,7 +57,7 @@ class BolosophyTool(BaseTool):
         # result = {'query_results': [doc.page_content for doc in docs]}
         # return json.dumps(result, ensure_ascii=False)
         if len(docs):
-            result = 'Following are the results from thie query: \n\n' + '\n'.join([f"- {doc.page_content}" for doc in docs])
+            result = 'Following are the results from this query: \n\n' + '\n'.join([f"- {doc.page_content}" for doc in docs])
         else:
             result = 'No results found for this query'
         return result
