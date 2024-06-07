@@ -22,7 +22,7 @@ class DrawInput(BaseModel):
 
 class DrawTool(BaseTool):
     name = "Draw"
-    description = "Draw an image using diffusion-based models based on the given prompt. The result will be in a JSON format, with `img_url` as the key to the image URL."
+    description = "Draw an image using diffusion-based models based on the given prompt."
     args_schema: Type[BaseModel] = DrawInput
     return_direct: bool = False
     

@@ -16,8 +16,9 @@ This project is bulit upon Streamlit and LangChain.
 - `scripts/` indivisual scripts
 - `tools/` LangChain tools
 - `utils/` utility functions
+- `app.js` Node.js proxy for Streamlit app, a workaround for publishing on cPanel
 - `BogoBots.py` entrypoint for Streamlit app
-- `main.js` Node.js proxy for Streamlit app, a workaround for publishing on cPanel
+- `loader.cjs` cPanel Node.js entrypoint
 - `run.sh` entrypoint for production
 
 ## Usage

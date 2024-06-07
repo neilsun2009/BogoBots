@@ -20,7 +20,7 @@ class BolosophyInput(BaseModel):
 
 class BolosophyTool(BaseTool):
     name = "Bolosophy"
-    description = "A local knowledge base constructed by Bogo, containing book notes, personal thoughts formulated by him. Useful for when asked to search Bogo\'s knowledge base or to answer questions about some professional topics an LLM have no knowledge of."
+    description = "A local knowledge base constructed by Bogo, containing book notes, personal thoughts, etc. Useful for when asked to search Bogo\'s knowledge base or to answer questions about some professional topics an LLM have no knowledge of."
     args_schema: Type[BaseModel] = BolosophyInput
     return_direct: bool = False
     
