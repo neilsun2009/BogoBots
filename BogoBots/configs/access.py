@@ -1,5 +1,5 @@
 access_level = {
     "visitor": 0,
-    "varified": 10,
+    "friend": 10,
     "admin": 50,
 }
