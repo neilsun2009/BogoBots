@@ -4,7 +4,7 @@ import streamlit as st
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 from BogoBots.utils.router import render_toc
-from BogoBots.utils.langchain import get_zilliz_vectorstore
+from BogoBots.utils.langchain_utils import get_zilliz_vectorstore
 
 st.set_page_config(
     page_title='Retriever #42 | BogoBots', 

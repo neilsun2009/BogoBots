@@ -7,7 +7,7 @@ from langchain_core.indexing.api import index
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 from BogoBots.document_loaders.weread_loader import WeReadLoader
-from BogoBots.utils.langchain import get_zilliz_vectorstore
+from BogoBots.utils.langchain_utils import get_zilliz_vectorstore
 from BogoBots.configs.embedding import collection_name
 
 

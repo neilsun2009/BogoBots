@@ -4,7 +4,7 @@ from langchain_community.callbacks.streamlit.streamlit_callback_handler import S
 from langchain_core.agents import AgentAction, AgentFinish
 from langchain_core.outputs import LLMResult
 
-from BogoBots.utils.streamlit import write_token_usage
+from BogoBots.utils.streamlit_utils import write_token_usage
 
 class CustomStreamlitCallbackHandler(StreamlitCallbackHandler):
     

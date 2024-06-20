@@ -17,9 +17,9 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from BogoBots.configs.models import available_models
 from BogoBots.tools.bolosophy import BolosophyTool
 from BogoBots.tools.draw import DrawTool
-from BogoBots.utils.streamlit import get_streamlit_cb, write_token_usage
-from BogoBots.utils.langchain import get_messages_from_checkpoint_tuple
-from BogoBots.utils.llm import get_model_price
+from BogoBots.utils.streamlit_utils import get_streamlit_cb, write_token_usage
+from BogoBots.utils.langchain_utils import get_messages_from_checkpoint_tuple
+from BogoBots.utils.llm_utils import get_model_price
 from BogoBots.utils.router import render_toc_with_expander
 from BogoBots.graphs.chat_with_tools_graph import get_chat_with_tools_graph
 from BogoBots.callbacks.custom_streamlit_callback_handler import CustomStreamlitCallbackHandler
@@ -57,7 +57,7 @@ with st.sidebar:
     st.button('New chat', on_click=clear_history)
     # model selection
     with st.popover('Switch model'):
-        model_group = st.selectbox('Select model group', available_models, format_func=lambda x: x['group'])
+        model_group = st.selectbox('Select model group', available_models, format_func=lambda x: x['group'], index=3)
         model = st.selectbox('Select model', model_group['models'], 
                             format_func=lambda x: ('[FREE!] ' if x['is_free'] else '') + x['display_name'])
     if model['is_free']:

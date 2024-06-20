@@ -12,7 +12,7 @@ from langchain_huggingface.embeddings import HuggingFaceEndpointEmbeddings
 from langchain_milvus.vectorstores import Zilliz
 import streamlit as st
 
-from BogoBots.utils.langchain import get_zilliz_vectorstore
+from BogoBots.utils.langchain_utils import get_zilliz_vectorstore
 
 class BolosophyInput(BaseModel):
     query: str = Field(description="search query string")

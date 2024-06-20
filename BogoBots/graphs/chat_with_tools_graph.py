@@ -9,7 +9,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langgraph.graph import END, StateGraph
 from langgraph.prebuilt.tool_node import ToolNode
 
-from BogoBots.utils.langchain import wrap_ad_hoc_tool_agent
+from BogoBots.utils.langchain_utils import wrap_ad_hoc_tool_agent
 
 def add_messages(left: list, right: list):
     """Add-don't-overwrite."""
