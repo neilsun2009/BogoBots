@@ -15,6 +15,12 @@ available_models = [
                 'native_tool_support': True,
             },
             {
+                'display_name': 'GPT-4o-mini',
+                'api_name': 'gpt-4o-mini-2024-07-18',
+                'is_free': False,
+                'native_tool_support': True,
+            },
+            {
                 'display_name': 'GPT-4 Turbo 2024-04-09',
                 'api_name': 'gpt-4-turbo',
                 'is_free': False,
@@ -73,10 +79,10 @@ available_models = [
                 'native_tool_support': False,
             },
             {
-                'display_name': 'Qwen1.5 72B Chat',
-                'api_name': 'qwen1.5-72b-chat',
+                'display_name': 'Qwen2 72B Instruct',
+                'api_name': 'qwen2-72b-instruct',
                 'is_free': False,
-                'native_tool_support': False,
+                'native_tool_support': True,
             },
             {
                 'display_name': 'Qwen1.5 32B Chat',
@@ -85,16 +91,16 @@ available_models = [
                 'native_tool_support': False,
             },
             {
-                'display_name': 'Qwen1.5 14B Chat',
-                'api_name': 'qwen1.5-14b-chat',
+                'display_name': 'Qwen2 57B-A14B Instruct',
+                'api_name': 'qwen2-57b-a14b-instruct',
                 'is_free': False,
-                'native_tool_support': False,
+                'native_tool_support': True,
             },
             {
-                'display_name': 'Qwen1.5 7B Chat',
-                'api_name': 'qwen1.5-7b-chat',
+                'display_name': 'Qwen2 7B Instruct',
+                'api_name': 'qwen2-72b-instruct',
                 'is_free': False,
-                'native_tool_support': False,
+                'native_tool_support': True,
             },
         ]
     },
@@ -126,6 +132,12 @@ available_models = [
         'supports_open_router': True,
         'open_router_prefix': 'anthropic',
         'models': [
+            {
+                'display_name': 'Claude 3.5 Sonnet',
+                'api_name': 'claude-3.5-sonnet',
+                'is_free': False,
+                'native_tool_support': True,
+            },
             {
                 'display_name': 'Claude 3 Opus',
                 'api_name': 'claude-3-opus',
@@ -175,6 +187,27 @@ available_models = [
                 'display_name': 'Gemini Pro 1.0',
                 'api_name': 'gemini-pro',
                 'is_free': False,
+                'native_tool_support': False,
+            },
+        ]
+    },
+    {
+        'group': 'Microsoft',
+        'icon': 'https://c.s-microsoft.com/favicon.ico?v2',
+        'supports_official_api': False,
+        'supports_open_router': True,
+        'open_router_prefix': 'microsoft',
+        'models': [
+            {
+                'display_name': 'Phi 3 Mini 128k Instruct (free)',
+                'api_name': 'phi-3-mini-128k-instruct:free',
+                'is_free': True,
+                'native_tool_support': False,
+            },
+            {
+                'display_name': 'Phi 3 Medium 128k Instruct (free)',
+                'api_name': 'phi-3-medium-128k-instruct:free',
+                'is_free': True,
                 'native_tool_support': False,
             },
         ]

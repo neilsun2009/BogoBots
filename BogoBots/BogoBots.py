@@ -310,6 +310,11 @@ if prompt := st.chat_input("What is up?"):
             graph = get_chat_with_tools_graph(llm, tools, memory, 
                                               use_ad_hoc_tool_agent=len(tools) and not model['native_tool_support'])
             
+            # interrupt button
+            interrupt_placeholder = st.empty()
+            with interrupt_placeholder:
+                st.button('Stop', help='Stop the current conversation.', type="primary",)
+
             for s in graph.stream({'messages': [HumanMessage(role="user", content=prompt)]}, config, stream_mode="values"):
                 message = s['messages'][-1]
                 if isinstance(message, tuple):
@@ -330,6 +335,9 @@ if prompt := st.chat_input("What is up?"):
             # update chat history
             checkpoint_tuple = memory.get_tuple(config)
             st.session_state.checkpoint_tuple = checkpoint_tuple
+            
+            # clear interrupt button
+            interrupt_placeholder.empty()
 
 # additional informations
 
