@@ -42,11 +42,11 @@ def get_chat_with_tools_graph(llm, tools, memory, use_ad_hoc_tool_agent=False):
     # Define a new graph
     graph = StateGraph(State)
 
-    if len(tools) > 0:
-        llm = llm.bind_tools(tools)
     if use_ad_hoc_tool_agent:
         llm = wrap_ad_hoc_tool_agent(llm, tools)
     else:
+        if len(tools) > 0:
+            llm = llm.bind_tools(tools)
         llm = ChatPromptTemplate.from_messages([("placeholder", "{messages}")]) | llm
     
     graph.add_node("agent", Assistant(llm))
