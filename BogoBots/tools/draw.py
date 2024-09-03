@@ -30,7 +30,7 @@ class DrawTool(BaseTool):
     hf_client: InferenceClient = None
     width: float = 512
     height: float = 512
-    model: str = "sd-community/sdxl-flash"
+    model: str = "black-forest-labs/FLUX.1-schnell"
     
     def __init__(self):
         super().__init__()
@@ -75,14 +75,10 @@ class DrawTool(BaseTool):
                             help='''The height in pixels of the image to generate.''')
         self.model = st.selectbox('Model', 
                             [
-                                "sd-community/sdxl-flash", 
+                                "black-forest-labs/FLUX.1-schnell",
+                                "black-forest-labs/FLUX.1-dev",
                                 "stabilityai/stable-diffusion-2-1",
                                 "stabilityai/stable-diffusion-xl-base-1.0",
-                                "Corcelio/mobius",
-                                "RunDiffusion/Juggernaut-XL-Lightning",
-                                "RunDiffusion/Juggernaut-XL-v9",
-                                "RunDiffusion/Juggernaut-X-Hyper",
-                                "RunDiffusion/Juggernaut-XL-Lightning",
                             ],
                             help='The model to use for image generation.')
 
