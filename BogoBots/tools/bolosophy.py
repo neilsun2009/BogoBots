@@ -12,8 +12,10 @@ from langchain_huggingface.embeddings import HuggingFaceEndpointEmbeddings
 from langchain_milvus.vectorstores import Zilliz
 import streamlit as st
 
-from BogoBots.utils.langchain_utils import get_zilliz_vectorstore
-
+from BogoBots.utils.embedding_utils import (
+    get_zilliz_vectorstore, get_embeddings, similarity_search
+)
+                                        
 class BolosophyInput(BaseModel):
     query: str = Field(description="search query string")
 
@@ -26,38 +28,24 @@ class BolosophyTool(BaseTool):
     
     emoji: str = "📚"
     vectorstore: Zilliz = None
+    embeddings: HuggingFaceEndpointEmbeddings = None
     num_entries: int = 5
     
     def __init__(self):
         super().__init__()
         self.vectorstore = get_zilliz_vectorstore()
+        self.embeddings = get_embeddings()
 
     def _run(
         self, query: str, run_manager: Optional[CallbackManagerForToolRun] = None
     ) -> str:
         """Use the tool."""
-        # try:
-        #     response = requests.get(f"http://0.0.0.0:8000/query?q={query}&num_entries={num_entries}", headers={'Content-Type': 'application/json'})
-        # except Exception as e:
-        #     raise ToolException(f"Request to Bolosophy failed with error: {str(e)}")
-
-        # json_response = response.json()
-        # # print("bogology results:", json_response)
-        # if response.status_code != 200:
-        #     raise ToolException(f"Request Bolosophy failed with status {response.status_code}: {json_response['error']['message']}")
-
-        # return json.dumps(json_response, ensure_ascii=False)
-
-        # self.vectorstore = get_zilliz_vectorstore()
         print('Bolosophy test with query:', query)
-        # retriever = vectorstore.as_retriever()
-        retriever = self.vectorstore.as_retriever(search_kwargs={"k": self.num_entries})
-        docs = retriever.invoke(query)
+        docs = similarity_search(self.embeddings, self.vectorstore, query, self.num_entries)
         print(f'{len(docs)} results retrieved')
-        # result = {'query_results': [doc.page_content for doc in docs]}
-        # return json.dumps(result, ensure_ascii=False)
+        print(docs)
         if len(docs):
-            result = 'Following are the results from this query: \n\n' + '\n'.join([f"- {doc.page_content}" for doc in docs])
+            result = 'Following are the results from this query: \n\n' + '\n'.join([f"- {doc.text}" for doc in docs])
         else:
             result = 'No results found for this query'
         return result

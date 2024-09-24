@@ -4,7 +4,9 @@ import streamlit as st
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 from BogoBots.utils.router import render_toc
-from BogoBots.utils.langchain_utils import get_zilliz_vectorstore
+from BogoBots.utils.embedding_utils import (
+    get_zilliz_vectorstore, get_embeddings, similarity_search
+)
 
 st.set_page_config(
     page_title='Retriever #42 | BogoBots', 
@@ -16,11 +18,8 @@ with st.sidebar:
     
 def retrieve(query, top_k=5):
     vectorstore = get_zilliz_vectorstore()
-    result_list = vectorstore.similarity_search_with_score(query, k=top_k)
-    docs = list()
-    for doc, score in result_list:
-        doc.metadata["score"] = score
-        docs.append(doc)
+    embeddings = get_embeddings()
+    docs = similarity_search(embeddings, vectorstore, query, top_k)
     return docs
 
 st.title('👓Retriever #42')
@@ -38,9 +37,8 @@ if query:
         docs = retrieve(query, top_k=top_k)
     st.write(f'{len(docs)} results retrieved')
     for idx, doc in enumerate(docs):
-        metadata = doc.metadata
         with st.container(border=True):
-            st.write(f'**#{idx+1}**')
-            st.write(doc.page_content)
-            st.caption(f"《{metadata['source']}》 {metadata['chapter']}")
-            st.caption(f"Relevance score: {metadata['score']:.4f}")
+            st.write(f'**#{idx+1} {doc.summary}**')
+            st.write(doc.text)
+            st.caption(f"《{doc.source}》 {doc.chapter}")
+            st.caption(f"Relevance score: {doc.score:.4f}")

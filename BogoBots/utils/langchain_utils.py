@@ -3,39 +3,13 @@ import sys
 
 from langchain_core.tools import render_text_description
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_huggingface.embeddings import HuggingFaceEndpointEmbeddings
-from langchain_milvus.vectorstores import Zilliz
-import streamlit as st
 
 from BogoBots.parsers.ad_hoc_tool_parser import ad_hoc_tool_parser
-from BogoBots.configs import embedding as embedding_config
 
 def get_messages_from_checkpoint_tuple(checkpoint_tuple):
     if checkpoint_tuple is None:
         return []
     return checkpoint_tuple.checkpoint['channel_values']['messages']
-
-def get_embeddings():
-    return HuggingFaceEndpointEmbeddings(
-        model= embedding_config.model_name,
-        task="feature-extraction",
-        huggingfacehub_api_token=st.secrets['huggingface_key'],
-        model_kwargs={}
-    )
-    
-def get_zilliz_vectorstore():
-    embeddings = get_embeddings()
-    return Zilliz(embeddings,
-        collection_name=embedding_config.collection_name,
-        connection_args={
-            "uri": st.secrets['zilliz_uri'],
-            "token": st.secrets['zilliz_key'],
-        },
-        text_field="text",
-        #  primary_field="primary_key",
-        # metadata_field="metadata",
-        auto_id=True,
-    )
 
 def wrap_ad_hoc_tool_agent(llm_with_tools, tools):
     """

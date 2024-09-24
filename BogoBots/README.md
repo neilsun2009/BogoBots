@@ -4,6 +4,11 @@ BogoInsight is an LLM agent (bot) project, aiming to explore the capabilities an
 
 This project is bulit upon Streamlit and LangChain.
 
+## To-do list
+
+- [ ] Auto-cleansing of uploaded/generated files
+- [ ] Update model versions
+
 ## File structure
 
 - `.streamlit/` streamlit configs
