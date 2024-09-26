@@ -3,6 +3,8 @@ from pymilvus import (connections, Collection, AnnSearchRequest, RRFRanker)
 import streamlit as st
 from BogoBots.configs import embedding as embedding_config
 
+_zilliz_vectorstore = None
+
 def get_embeddings():
     return HuggingFaceEndpointEmbeddings(
         model= embedding_config.model_name,
@@ -12,13 +14,15 @@ def get_embeddings():
     )
     
 def get_zilliz_vectorstore():
-    connections.connect(
-        uri=st.secrets['zilliz_uri'],
-        token=st.secrets['zilliz_key'],
-    )
-    col = Collection(name=embedding_config.collection_name)
-    col.load()
-    return col
+    global _zilliz_vectorstore
+    if _zilliz_vectorstore is None:
+        connections.connect(
+            uri=st.secrets['zilliz_uri'],
+            token=st.secrets['zilliz_key'],
+        )
+        _zilliz_vectorstore = Collection(name=embedding_config.collection_name)
+        _zilliz_vectorstore.load()
+    return _zilliz_vectorstore
 
 def similarity_search(embeddings, vectorstore, query, top_k=5):
     # Instruct required by multilingual-e5-large-instruct, see https://huggingface.co/intfloat/multilingual-e5-large-instruct#faq

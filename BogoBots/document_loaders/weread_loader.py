@@ -120,6 +120,8 @@ class WeReadLoader(BaseLoader):
                 # A new book note starts
                 yield from self._yield_accu_text(accu_text, chapter_name)
                 accu_text = line[2:] # Skip '◆ '
+            elif chapter_name == '':
+                chapter_name = line
             else:
                 accu_text += '\n' + line
             continued_empty_lines = 0

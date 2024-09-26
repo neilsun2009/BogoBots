@@ -18,8 +18,8 @@ def get_book_cover_from_douban(title):
             print(results, flush=True)
             if results:
                 pic_url = results[0].get('pic')
-                if pic_url:
-                    pic_url = pic_url.replace('/s/', '/m/')
+                # if pic_url:
+                #     pic_url = pic_url.replace('/s/', '/m/')
                 return pic_url
         except Exception as e:
             print(e, flush=True)

@@ -4,6 +4,7 @@ import streamlit as st
 import traceback
 import time
 import json
+import math
 from io import StringIO
 from langchain_openai.chat_models.base import ChatOpenAI
 from langchain.chains.combine_documents import create_stuff_documents_chain
@@ -33,6 +34,8 @@ BOOK_LIST_COLUMNS = 2
 EMBEDDING_BATCH_SIZE = 64
 DEFAULT_COVER_URL = 'https://hatscripts.github.io/circle-flags/flags/xx.svg'
 
+vectorstore = get_zilliz_vectorstore()
+
 # dialogs
 @st.dialog('Add a book', width='large')
 def add_book(title, authors, source_type, language, book_notes_file):
@@ -54,7 +57,7 @@ def add_book(title, authors, source_type, language, book_notes_file):
                 embedding_model=embedding_model,
                 summary_model=summary_model
             )
-    st_display_book_details(new_book, show_stats=False)
+    st_display_book_details(new_book, is_adding_new_book=True)
     
     # summarizer
     summarizer = ChatOpenAI(openai_api_base=embedding_config.summarizer_api_base[language],
@@ -135,9 +138,10 @@ def add_book(title, authors, source_type, language, book_notes_file):
                 try:
                     # progress_bar = st.progress(0, text=f'Progressing... {0}/{num_entries}')
                     batch_idx = 0
+                    batch_count = math.ceil(len(docs) / EMBEDDING_BATCH_SIZE)
                     for i in range(0, len(docs), EMBEDDING_BATCH_SIZE):
                         batch_idx += 1
-                        st.write(f'Progressing batch #{batch_idx}...')
+                        st.write(f'Progressing batch #{batch_idx} of {batch_count}...')
                         batch = docs[i:i+EMBEDDING_BATCH_SIZE]
                         # parse to dict, because cached docs are dicts
                         if not isinstance(batch[0], dict):
@@ -181,9 +185,9 @@ def add_book(title, authors, source_type, language, book_notes_file):
 @st.dialog('Book details', width='large')
 def show_book_details(book_id):
     with get_session() as session:
-        book = session.query(Book).get(book_id)
+        book = session.get(Book, book_id)
         st_display_book_details(book)
-        update_btn = st.button('Update')
+        update_btn = st.button('Update Book')
         if update_btn:
             with st.status('Updating database...', state='running', expanded=True) as status:
                 try:
@@ -198,7 +202,7 @@ def show_book_details(book_id):
                         st.code(traceback.format_exc(), language='python')
     
         del_placeholder = st.empty()
-        del_btn = del_placeholder.button('Delete', type='primary')
+        del_btn = del_placeholder.button('Delete Book', type='primary')
         if del_btn:
             with del_placeholder.container():
                 with st.status('Deleting from vector store...', state='running', expanded=True) as status:
@@ -235,19 +239,54 @@ def show_book_details(book_id):
 # db operations
 def get_books():
     with get_session() as session:
-        return session.query(Book).all()
+        return session.query(Book).order_by(Book.id).all()
     
-def st_display_book_details(book: Book, show_stats=True):
+def get_chapters_by_book(book: Book):
+    results = vectorstore.query(
+        expr=f'source == "{book.name}"',
+        output_fields=['chapter', 'note_idx']
+    )
+    sorted_results = sorted(results, key=lambda x: x['note_idx'])
+    chapters = []
+    for result in sorted_results:
+        chapter = result['chapter']
+        if chapter not in chapters:
+            chapters.append(chapter)
+    return chapters
+
+def get_notes_by_chapter(book: Book, chapter: str):
+    results = vectorstore.query(
+        expr=f'source == "{book.name}" and chapter == "{chapter}"',
+        output_fields=['note_idx', 'text', 'summary']
+    )
+    results = sorted(results, key=lambda x: x['note_idx'])
+    return results
+    
+@st.fragment
+def st_display_notes(book: Book):
+    chapters = get_chapters_by_book(book)
+    sel_chapter = st.selectbox('Select a chapter', chapters)
+    notes = get_notes_by_chapter(book, sel_chapter)
+    with st.container(border=True, height=500):
+        st.write(notes)
+    
+def st_display_book_details(book: Book, is_adding_new_book=False):
     columns = st.columns([1, 2])
     with columns[0]:
-        cover_placeholder = st.empty()
-        if not book.cover_url:
-            book.cover_url = get_book_cover_from_douban(book.name)
-        if book.cover_url:
+        with st.spinner('Loading book info...'):
+            cover_placeholder = st.empty()
+            if not book.cover_url:
+                book.cover_url = get_book_cover_from_douban(book.name)
+            if book.cover_url:
+                cover_placeholder.image(get_image_bytes_from_url(book.cover_url),
+                                        use_column_width=True)
+            else:
+                cover_placeholder.image(DEFAULT_COVER_URL, use_column_width=True)
+        uploaded_cover = st.file_uploader('Upload Cover', type=['jpg', 'png', 'jpeg', 'gif'])
+        if uploaded_cover:
+            book.cover_url = upload_image_to_imgur(uploaded_cover, book.name, f'Cover of {book.name}')
             cover_placeholder.image(get_image_bytes_from_url(book.cover_url),
                                     use_column_width=True)
-        else:
-            cover_placeholder.image(DEFAULT_COVER_URL, use_column_width=True)
     with columns[1]:
         st.write(f'**{book.name}** by {", ".join(book.authors)}')
         source_type = 'WeRead' if book.source_type == 1 else 'iReader'
@@ -255,14 +294,9 @@ def st_display_book_details(book: Book, show_stats=True):
         st.write(f'`{source_type}` `{language}`')
         st.write(f'Embedding Model: `{book.embedding_model}`')
         st.write(f'Summary Model: `{book.summary_model}`')
-        if show_stats:
+        if not is_adding_new_book:
             st.write(f'Notes: {book.num_notes} | Entries: {book.num_entries}')
-        st.divider()
-        uploaded_cover = st.file_uploader('Upload Cover', type=['jpg', 'png', 'jpeg', 'gif'])
-        if uploaded_cover:
-            book.cover_url = upload_image_to_imgur(uploaded_cover, book.name, f'Cover of {book.name}')
-            cover_placeholder.image(get_image_bytes_from_url(book.cover_url),
-                                    use_column_width=True)
+            st_display_notes(book)
 
 # Add a book
 st.subheader('Add a book')
@@ -296,14 +330,13 @@ else:
             if i + j < len(books):
                 book = books[i + j]
                 with columns[j]:
-                    with st.container(border=True):
+                    with st.container(border=True, height=200):
                         inner_columns = st.columns([1, 2])
                         with inner_columns[0]:
                             cover_url = book.cover_url or DEFAULT_COVER_URL
                             st.image(get_image_bytes_from_url(cover_url), use_column_width=True)
                         with inner_columns[1]:
-                            st.markdown(f"**{book.name}**")
-                            st.write(", ".join(book.authors))
+                            st.markdown(f"**{book.name}**\n\n{', '.join(book.authors)}")
                             st.caption(f"Notes: {book.num_notes} | Entries: {book.num_entries}")
-                        st.button('More', on_click=show_book_details, args=(book.id,), key=f'more_{book.id}')
+                            st.button('More', on_click=show_book_details, args=(book.id,), key=f'more_{book.id}', use_container_width=False)
 st.button('Refresh', on_click=st.rerun)
