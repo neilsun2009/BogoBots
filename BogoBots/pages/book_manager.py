@@ -9,7 +9,7 @@ from io import StringIO
 from langchain_openai.chat_models.base import ChatOpenAI
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.prompts import ChatPromptTemplate
-from sqlalchemy import or_, func
+from sqlalchemy import or_
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 from BogoBots.database.session import get_session
@@ -59,7 +59,7 @@ def add_book(title, authors, source_type, language, book_notes_file):
     summary_model = embedding_config.summarizer_model_name[language]
     new_book = Book(
                 name=title,
-                authors=authors.split(','),  # Assuming authors are comma-separated
+                authors=authors,  # Assuming authors are comma-separated
                 source_type=1 if source_type == 'WeRead' else 2,
                 language=1 if language == 'cn' else 2,
                 embedding_model=embedding_model,
@@ -255,7 +255,7 @@ def get_books():
         query = session.query(Book).filter(
             or_(
                 Book.name.ilike(f'%{search_query}%'),
-                func.array_to_string(Book.authors, ',').ilike(f'%{search_query}%')
+                Book.authors.ilike(f'%{search_query}%')
             )
         )
         
@@ -317,7 +317,7 @@ def st_display_book_details(book: Book, is_adding_new_book=False, raw_book_notes
             cover_placeholder.image(get_image_from_url(book.cover_url),
                                     use_column_width=True)
     with columns[1]:
-        st.write(f'**{book.name}** by {", ".join(book.authors)}')
+        st.write(f'**{book.name}** by {book.authors.replace(",", ", ")}')
         source_type = 'WeRead' if book.source_type == 1 else 'iReader'
         language = 'CN' if book.language == 1 else 'EN'
         st.write(f'`{source_type}` `{language}`')
@@ -362,7 +362,7 @@ def st_display_booklist():
                                 cover_url = book.cover_url or DEFAULT_COVER_URL
                                 st.image(get_image_from_url(cover_url), use_column_width=True)
                             with inner_columns[1]:
-                                st.markdown(f"**{book.name}**\n\n{', '.join(book.authors)}")
+                                st.markdown(f"**{book.name}**\n\n{book.authors.replace(',', ', ')}")
                                 st.caption(f"Notes: {book.num_notes} | Entries: {book.num_entries}")
                                 st.button('Details', on_click=show_book_details, args=(book.id,), 
                                           key=f'more_{book.id}', use_container_width=True,

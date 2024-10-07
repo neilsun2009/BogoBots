@@ -8,6 +8,8 @@ RUN apt-get update && apt-get install -y \
     software-properties-common \
     git \
     vim \
+    default-libmysqlclient-dev \
+    pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
 COPY . /app/BogoBots

@@ -1,6 +1,6 @@
 # BogoInsight/database/session.py
 import os
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.exc import OperationalError
 import streamlit as st
@@ -12,13 +12,26 @@ from BogoBots.models import (
 )
 
 
-DATABASE_URL = f"postgresql://postgres.wggxwlhopitryatyprhk:{st.secrets['db_password']}@aws-0-ap-northeast-1.pooler.supabase.com:6543/postgres"
+# DATABASE_URL = f"postgresql://postgres.wggxwlhopitryatyprhk:{st.secrets['db_password']}@aws-0-ap-northeast-1.pooler.supabase.com:6543/postgres"
+DATABASE_URL = st.secrets['db_url']
 
 engine = create_engine(DATABASE_URL)
 Session = sessionmaker(bind=engine)
 
 def create_tables():
     try:
+        # Set the default character set for the database
+        with engine.connect() as connection:
+            connection.execute(text("SET CHARACTER SET utf8mb4"))
+            connection.execute(text("SET collation_connection = utf8mb4_unicode_ci"))
+        
+        table_args = {
+            'mysql_charset': 'utf8mb4',
+            'mysql_collate': 'utf8mb4_unicode_ci'
+        }
+        for table in Base.metadata.tables.values():
+            table.kwargs.update(table_args)
+            
         Base.metadata.create_all(bind=engine)
         print("Database tables created.")
     except OperationalError as e:
