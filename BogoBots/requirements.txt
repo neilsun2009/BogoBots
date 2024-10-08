@@ -15,3 +15,4 @@ langchain_milvus==0.1.0
 langgraph==0.0.55
 pymilvus==2.4.3
 mysqlclient==2.2.4
+ebooklib==0.17.1

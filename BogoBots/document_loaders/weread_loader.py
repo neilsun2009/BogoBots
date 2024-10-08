@@ -112,7 +112,7 @@ class WeReadLoader(BaseLoader):
                 accu_text = ''
                 chapter_name = line
             # elif re.match(self.chapter_name_regex, line, re.IGNORECASE):
-            elif continued_empty_lines == 2 and not line.startswith('◆ '):
+            elif continued_empty_lines >= 2 and not line.startswith('◆ '):
                 yield from self._yield_accu_text(accu_text, chapter_name)
                 accu_text = ''
                 chapter_name = line

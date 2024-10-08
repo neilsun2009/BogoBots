@@ -17,9 +17,10 @@ from BogoBots.models.book import Book
 from BogoBots.utils.router import render_toc
 from BogoBots.configs import embedding as embedding_config
 from BogoBots.document_loaders.weread_loader import WeReadLoader
+from BogoBots.document_loaders.ireader_loader import IReaderLoader
 from BogoBots.utils.embedding_utils import get_zilliz_vectorstore, get_embeddings
-from BogoBots.utils.misc import (get_book_cover_from_douban, upload_image_to_imgur,
-                                get_image_from_url)
+from BogoBots.utils.book_utils import (get_book_cover_from_douban, upload_image_to_imgur,
+                                get_image_from_url, parse_epub_to_txt)
 
 st.set_page_config(
     page_title='Book Manager | BogoBots', 
@@ -50,6 +51,25 @@ def add_book(title, authors, source_type, language, book_notes_file):
     if book_notes_file is None:
         raise ValueError('Please upload a book notes file')
     
+    # Check file extension and get string value
+    file_extension = book_notes_file.name.split('.')[-1].lower()
+    
+    if file_extension == 'txt':
+        book_content = book_notes_file.getvalue().decode("utf-8")
+    elif file_extension == 'epub':
+        # Create directory if it doesn't exist
+        epub_upload_dir = './static/epub_uploads'
+        os.makedirs(epub_upload_dir, exist_ok=True)
+        # Save the uploaded epub file
+        epub_path = os.path.join(epub_upload_dir, book_notes_file.name)
+        with open(epub_path, 'wb') as f:
+            f.write(book_notes_file.getvalue())
+        
+        book_content = parse_epub_to_txt(epub_path)
+        # Remove the temporary epub file
+        os.remove(epub_path)
+    else:
+        raise ValueError(f"Unsupported file type: {file_extension}")
     # ensure no title conflict
     with get_session() as session:
         if session.query(Book).filter(Book.name == title).first():
@@ -65,7 +85,7 @@ def add_book(title, authors, source_type, language, book_notes_file):
                 embedding_model=embedding_model,
                 summary_model=summary_model
             )
-    st_display_book_details(new_book, is_adding_new_book=True, raw_book_notes=book_notes_file.getvalue().decode("utf-8"))
+    st_display_book_details(new_book, is_adding_new_book=True, raw_book_notes=book_content)
     
     # summarizer
     summarizer = ChatOpenAI(openai_api_base=embedding_config.summarizer_api_base[language],
@@ -78,10 +98,12 @@ def add_book(title, authors, source_type, language, book_notes_file):
     
     if source_type == 'WeRead':
         Loader = WeReadLoader
+    elif source_type == 'iReader':
+        Loader = IReaderLoader
     else:
         raise ValueError(f"Unsupported book source type: {source_type}")
     
-    book_notes_file_source = StringIO(book_notes_file.getvalue().decode("utf-8"))
+    book_notes_file_source = StringIO(book_content)
     
     parsed_cache_file = f'static/parsed_cache/{title}.json'
     parsed_done_file = f'static/parsed_done/{title}.json'
@@ -400,7 +422,7 @@ with st.form('add_book_form', clear_on_submit=True):
                         horizontal=True,
                         format_func=lambda x: ':flag-cn:' if x == 'cn' else ':flag-gb:'
                         )
-    book_notes_file = st.file_uploader('Book Notes File', type=['txt'])
+    book_notes_file = st.file_uploader('Book Notes File', type=['txt', 'epub'])
     
     submitted = st.form_submit_button('Add Book', icon=":material/add:")
     if submitted:

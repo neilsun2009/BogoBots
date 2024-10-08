@@ -4,6 +4,9 @@ import os
 import re
 from urllib.parse import quote
 import unicodedata
+import ebooklib
+from ebooklib import epub
+from bs4 import BeautifulSoup
 
 
 IMAGE_CACHE_BASE = 'static/image_cache'
@@ -67,6 +70,9 @@ def get_image_from_url(url):
     response = requests.get(url, headers=headers)
     if response.status_code == 200:
         image_bytes = response.content
+        if len(image_bytes) == 0:
+            print(f"Image empty at {url}", flush=True)
+            return None
         # Write image bytes to cache
         cache_path = parse_url_to_cache_path(url)
         os.makedirs(os.path.dirname(cache_path), exist_ok=True)
@@ -97,3 +103,75 @@ def parse_url_to_cache_path(url):
     
     return cache_path
     
+def parse_epub_to_txt(epub_path):
+    ebook = epub.read_epub(epub_path)
+    book_content = ""
+    
+    # Get the table of contents
+    toc = ebook.toc
+    
+    # Function to extract text from TOC items
+    def extract_toc_text(toc_item):
+        if isinstance(toc_item, tuple):
+            return toc_item[0]
+        elif hasattr(toc_item, 'title'):
+            return toc_item.title
+        return str(toc_item)
+    
+    # Function to get the href from TOC items
+    def extract_toc_href(toc_item):
+        if isinstance(toc_item, tuple) and len(item) > 1:
+            return item[1]
+        elif hasattr(toc_item, 'href'):
+            return toc_item.href
+        return None
+    
+    # Function to process TOC items and their content
+    def process_toc_item(item, level=0):
+        nonlocal book_content
+        title = extract_toc_text(item)
+        href = extract_toc_href(item)
+        
+        # Add empty lines before title based on level
+        book_content += "\n" * 5 + title
+        # book_content += "\n" * (5 if level == 0 else 3)
+        # book_content += "#" * (level + 1) + f" {title}\n\n"
+        
+        if href and href in href_content_map:
+            book_content += "\n" * 3 + href_content_map[href]
+            # paragraphs = href_content_map[href].split('\n')
+            # for paragraph in paragraphs:
+            #     # if paragraph.strip():
+            #     book_content += paragraph.strip() + "\n\n"
+        
+        # Process sub-items if any
+        if isinstance(item, tuple) and len(item) > 1 and isinstance(item[1], list):
+            for subitem in item[1]:
+                process_toc_item(subitem, level + 1)
+    
+    # Create a dictionary to map hrefs to their content
+    href_content_map = {}
+    
+    # Get all items in reading order
+    spine_items = ebook.get_items_of_type(ebooklib.ITEM_DOCUMENT)
+    
+    for item in spine_items:
+        # Extract content from each item
+        content = item.get_content().decode('utf-8')
+        soup = BeautifulSoup(content, 'html.parser')
+        
+        # print(soup.prettify(), flush=True)
+        
+        # Extract and clean text content
+        divs = soup.find_all('div')
+        text = '\n\n\n'.join([div.get_text(strip=True) for div in divs])
+        href_content_map[item.get_name()] = text
+    
+    
+    # Process the TOC to order the content
+    for item in toc:
+        process_toc_item(item)
+    
+    # Clean up excessive newlines
+    book_content = re.sub(r'\n{6,}', '\n\n\n\n\n', book_content)
+    return book_content
