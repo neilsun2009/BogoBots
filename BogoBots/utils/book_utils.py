@@ -107,6 +107,9 @@ def parse_epub_to_txt(epub_path):
     ebook = epub.read_epub(epub_path)
     book_content = ""
     
+    # Get the title
+    title = ebook.get_metadata('DC', 'title')[0][0] if ebook.get_metadata('DC', 'title') else "Unknown Title"
+    
     # Get the table of contents
     toc = ebook.toc
     
@@ -120,20 +123,20 @@ def parse_epub_to_txt(epub_path):
     
     # Function to get the href from TOC items
     def extract_toc_href(toc_item):
-        if isinstance(toc_item, tuple) and len(item) > 1:
-            return item[1]
+        if isinstance(toc_item, tuple) and len(toc_item) > 1:
+            return toc_item[1]
         elif hasattr(toc_item, 'href'):
             return toc_item.href
         return None
     
     # Function to process TOC items and their content
-    def process_toc_item(item, level=0):
+    def process_toc_item(item, is_first_item=False, level=0):
         nonlocal book_content
         title = extract_toc_text(item)
         href = extract_toc_href(item)
         
         # Add empty lines before title based on level
-        book_content += "\n" * 5 + title
+        book_content += ("\n" * 5 + title) if not is_first_item else title
         # book_content += "\n" * (5 if level == 0 else 3)
         # book_content += "#" * (level + 1) + f" {title}\n\n"
         
@@ -160,18 +163,30 @@ def parse_epub_to_txt(epub_path):
         content = item.get_content().decode('utf-8')
         soup = BeautifulSoup(content, 'html.parser')
         
-        # print(soup.prettify(), flush=True)
-        
         # Extract and clean text content
         divs = soup.find_all('div')
-        text = '\n\n\n'.join([div.get_text(strip=True) for div in divs])
+        text = '\n\n'.join([div.get_text(strip=True) for div in divs])
         href_content_map[item.get_name()] = text
     
+    # Count the number of notes
+    note_count = sum(len(href_content_map[extract_toc_href(item)].split('\n\n')) for item in toc if extract_toc_href(item) in href_content_map)
+    
+    # Build the content
+    book_content += f"{title}\n\n\n{note_count}个笔记\n\n"
     
     # Process the TOC to order the content
-    for item in toc:
-        process_toc_item(item)
+    for idx, item in enumerate(toc):
+        title = extract_toc_text(item)
+        href = extract_toc_href(item)
+        
+        if idx > 0:
+            book_content += "\n\n"
+        book_content += title + "\n"
+        
+        if href and href in href_content_map:
+            paragraphs = href_content_map[href].split('\n\n')
+            for paragraph in paragraphs:
+                if paragraph.strip():
+                    book_content += f"\n◆ {paragraph}\n"
     
-    # Clean up excessive newlines
-    book_content = re.sub(r'\n{6,}', '\n\n\n\n\n', book_content)
     return book_content

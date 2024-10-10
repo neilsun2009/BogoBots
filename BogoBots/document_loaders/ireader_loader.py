@@ -10,10 +10,14 @@ from BogoBots.document_loaders.summarize_loader import SummarizeLoader
 
 
 class IReaderLoader(SummarizeLoader):
-    """A loader for book notes from iReader."""
+    """
+    [DEPRECATED] Use WeReadLoader instead.
     
-    def __init__(self, file_source: Union[str, StringIO], book_name: str, summarizer=None, st_container=None):
-        super().__init__(file_source, book_name, summarizer, st_container)
+    A loader for book notes from iReader.
+    """
+    
+    def __init__(self, file_source: Union[str, StringIO], book_name: str, summarizer=None, st_container=None, chunk_size=500):
+        super().__init__(file_source, book_name, summarizer, st_container, chunk_size)
         
     def _yield_accu_text(self, accu_text, chapter_name) -> Iterator[Document]:
         if accu_text:

@@ -17,7 +17,6 @@ from BogoBots.models.book import Book
 from BogoBots.utils.router import render_toc
 from BogoBots.configs import embedding as embedding_config
 from BogoBots.document_loaders.weread_loader import WeReadLoader
-from BogoBots.document_loaders.ireader_loader import IReaderLoader
 from BogoBots.utils.embedding_utils import get_zilliz_vectorstore, get_embeddings
 from BogoBots.utils.book_utils import (get_book_cover_from_douban, upload_image_to_imgur,
                                 get_image_from_url, parse_epub_to_txt)
@@ -96,10 +95,8 @@ def add_book(title, authors, source_type, language, book_notes_file):
                 )
     summarizer = ChatPromptTemplate.from_template(embedding_config.summarizer_template[language]) | summarizer
     
-    if source_type == 'WeRead':
+    if source_type in ['WeRead', 'iReader']:
         Loader = WeReadLoader
-    elif source_type == 'iReader':
-        Loader = IReaderLoader
     else:
         raise ValueError(f"Unsupported book source type: {source_type}")
     
@@ -131,7 +128,7 @@ def add_book(title, authors, source_type, language, book_notes_file):
                 with st.status('Parsing notes...', state='running', expanded=True) as status:
                     try:
                         load_ctn = st.container(height=200)
-                        loader = Loader(book_notes_file_source, title, summarizer=summarizer, st_container=load_ctn)
+                        loader = Loader(book_notes_file_source, title, summarizer=summarizer, st_container=load_ctn, chunk_size=embedding_config.chunk_size[language])
                         docs = loader.load()
                         new_book.num_notes = loader.note_idx
                         new_book.num_entries = len(docs)
@@ -341,7 +338,7 @@ def st_display_book_details(book: Book, is_adding_new_book=False, raw_book_notes
     with columns[1]:
         st.write(f'**{book.name}** by {book.authors.replace(",", ", ")}')
         source_type = 'WeRead' if book.source_type == 1 else 'iReader'
-        language = 'CN' if book.language == 1 else 'EN'
+        language = '中文' if book.language == 1 else 'English'
         st.write(f'`{source_type}` `{language}`')
         st.write(f'Embedding Model: `{book.embedding_model}`')
         st.write(f'Summary Model: `{book.summary_model}`')
@@ -349,8 +346,9 @@ def st_display_book_details(book: Book, is_adding_new_book=False, raw_book_notes
             st.write(f'Notes: {book.num_notes} | Entries: {book.num_entries}')
             st_display_notes(book)
         if raw_book_notes:
-            with st.container(border=True, height=500):
-                st.text(raw_book_notes)
+            # with st.container(border=True, height=500):
+            st.text_area('Raw Book Notes', value=raw_book_notes, height=500,
+                         disabled=True, label_visibility='collapsed')
 
 @st.fragment
 def st_display_booklist():
@@ -420,7 +418,7 @@ with st.form('add_book_form', clear_on_submit=True):
                            )
     language = st.radio('Language', ['cn', 'en'],
                         horizontal=True,
-                        format_func=lambda x: ':flag-cn:' if x == 'cn' else ':flag-gb:'
+                        format_func=lambda x: '中文' if x == 'cn' else 'English'
                         )
     book_notes_file = st.file_uploader('Book Notes File', type=['txt', 'epub'])
     

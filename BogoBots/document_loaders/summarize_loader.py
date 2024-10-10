@@ -22,13 +22,13 @@ class SummarizeLoader(BaseLoader):
         "",
     ]
     
-    def __init__(self, file_source: Union[str, StringIO], book_name: str, summarizer=None, st_container=None):
+    def __init__(self, file_source: Union[str, StringIO], book_name: str, summarizer=None, st_container=None, chunk_size=500):
         self.file_source = file_source
         self.book_name = book_name
         self.note_idx = 0
         self.text_splitter = RecursiveCharacterTextSplitter(
             separators=self.separators,
-            chunk_size=500, 
+            chunk_size=chunk_size, 
             chunk_overlap=20,
         )
         self.summarizer = summarizer
@@ -38,15 +38,18 @@ class SummarizeLoader(BaseLoader):
         for split_doc in self.text_splitter.split_documents([doc]):
             if self.summarizer is not None:
                 summary = self.summarizer.invoke({'context': split_doc.page_content})
-                summary = summary.content
+                summary = summary.content.strip().split('\n')[0]
                 if summary.startswith("标题："):
                     summary = summary[3:]
                 # remove quotation marks at the beginning and end
-                if summary[0] in ['“', '‘', '"', '\'', '《']:
+                while summary[0] in ['“', '‘', '"', '\'', '《', '"']:
                     summary = summary[1:]
-                if summary[-1] in ['”', '’', '"', '\'', '》']:
+                while summary[-1] in ['”', '’', '"', '\'', '》', '"']:
                     summary = summary[:-1]
-                summary = summary.strip().split('\n')[0]
+                summary = summary.strip()
+                # remove "标题：" again
+                if summary.startswith("标题："):
+                    summary = summary[3:]
                 self._log_progress(f'Summary for note No.{self.note_idx}: {summary} ({split_doc.metadata["chapter"]})')
                 split_doc.metadata['summary'] = summary
             yield split_doc
