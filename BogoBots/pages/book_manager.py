@@ -347,8 +347,8 @@ def st_display_book_details(book: Book, is_adding_new_book=False, raw_book_notes
             st_display_notes(book)
         if raw_book_notes:
             # with st.container(border=True, height=500):
-            st.text_area('Raw Book Notes', value=raw_book_notes, height=500,
-                         disabled=True, label_visibility='collapsed')
+            st.text_area('Preview (readonly)', value=raw_book_notes, height=500,
+                         disabled=True)
 
 @st.fragment
 def st_display_booklist():

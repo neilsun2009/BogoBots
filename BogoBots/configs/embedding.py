@@ -5,8 +5,8 @@ summarizer_api_base = {
     'cn': 'https://openrouter.ai/api/v1'
 }
 summarizer_model_name = {
-    'en': 'meta-llama/llama-3.2-3b-instruct',
-    # 'en': 'google/gemini-flash-1.5-8b',
+    # 'en': 'meta-llama/llama-3.2-3b-instruct',
+    'en': 'google/gemini-flash-1.5-8b',
     # 'cn': 'openai/gpt-4o-mini'
     'cn': 'qwen/qwen-2-7b-instruct'
 }
