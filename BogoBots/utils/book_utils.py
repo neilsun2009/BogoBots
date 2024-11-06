@@ -181,6 +181,8 @@ def parse_epub_to_txt(epub_path):
         
         if idx > 0:
             book_content += "\n\n"
+        if not title:
+            title = '正文'
         book_content += title + "\n"
         
         if href and href in href_content_map:

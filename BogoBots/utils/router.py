@@ -29,7 +29,7 @@ PAGES = [
         "label": "Book Manager",
         "icon": "📚",
         "link": "pages/book_manager.py",
-        "access": access_level['visitor'],
+        "access": access_level['admin'],
     },
 ]
 

@@ -11,7 +11,7 @@ summarizer_model_name = {
     'cn': 'qwen/qwen-2-7b-instruct'
 }
 chunk_size = {
-    'en': 2000,
+    'en': 1500,
     'cn': 500
 }
 summarizer_template = {
