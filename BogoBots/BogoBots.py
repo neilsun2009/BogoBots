@@ -57,9 +57,9 @@ with st.sidebar:
     st.button('New chat', on_click=clear_history)
     # model selection
     with st.popover('Switch model'):
-        model_group = st.selectbox('Select model group', available_models, format_func=lambda x: x['group'], index=3)
+        model_group = st.selectbox('Select model group', available_models, format_func=lambda x: x['group'], index=0)
         model = st.selectbox('Select model', model_group['models'], 
-                            format_func=lambda x: ('[FREE!] ' if x['is_free'] else '') + x['display_name'])
+                            format_func=lambda x: ('[FREE] ' if x['is_free'] else '') + x['display_name'])
     if model['is_free']:
         st.caption(' 🎉 Free model at your service!')
     else:

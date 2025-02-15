@@ -16,10 +16,12 @@ from BogoBots.database.session import get_session
 from BogoBots.models.book import Book
 from BogoBots.utils.router import render_toc
 from BogoBots.configs import embedding as embedding_config
+from BogoBots.configs.access import access_level
 from BogoBots.document_loaders.weread_loader import WeReadLoader
 from BogoBots.utils.embedding_utils import get_zilliz_vectorstore, get_embeddings
 from BogoBots.utils.book_utils import (get_book_cover_from_douban, upload_image_to_imgur,
                                 get_image_from_url, parse_epub_to_txt)
+from BogoBots.utils.streamlit_utils import render_unlock_form
 
 st.set_page_config(
     page_title='Book Manager | BogoBots', 
@@ -30,6 +32,8 @@ with st.sidebar:
     render_toc()
     
 st.title('📚 Book Manager')
+
+cur_access_level = st.session_state.get('access_level', access_level['visitor'])
 
 PAGE_LIMIT = 10
 BOOK_LIST_COLUMNS = 2
@@ -409,22 +413,26 @@ def st_display_booklist():
 # Add a book
 st.subheader('Add a book')
 
-with st.form('add_book_form', clear_on_submit=True):
-    title = st.text_input('Title')
-    authors = st.text_input('Authors', help='Separate authors with commas')
-    source_type = st.radio('Source Type', ['WeRead', 'iReader'],
-                           horizontal=True,
-                        #    format_func=lambda x: 'WeRead' if x == 'weread' else 'iReader'
-                           )
-    language = st.radio('Language', ['cn', 'en'],
-                        horizontal=True,
-                        format_func=lambda x: '中文' if x == 'cn' else 'English'
-                        )
-    book_notes_file = st.file_uploader('Book Notes File', type=['txt', 'epub'])
-    
-    submitted = st.form_submit_button('Add Book', icon=":material/add:")
-    if submitted:
-        add_book(title, authors, source_type, language, book_notes_file)
+if cur_access_level < access_level['admin']:
+    st.warning('🔒 This section is for admin only.')
+    render_unlock_form()
+else:
+    with st.form('add_book_form', clear_on_submit=True):
+        title = st.text_input('Title')
+        authors = st.text_input('Authors', help='Separate authors with commas')
+        source_type = st.radio('Source Type', ['WeRead', 'iReader'],
+                            horizontal=True,
+                            #    format_func=lambda x: 'WeRead' if x == 'weread' else 'iReader'
+                            )
+        language = st.radio('Language', ['cn', 'en'],
+                            horizontal=True,
+                            format_func=lambda x: '中文' if x == 'cn' else 'English'
+                            )
+        book_notes_file = st.file_uploader('Book Notes File', type=['txt', 'epub'])
+        
+        submitted = st.form_submit_button('Add Book', icon=":material/add:")
+        if submitted:
+            add_book(title, authors, source_type, language, book_notes_file)
 
 # Book list
 st.subheader('Book List')

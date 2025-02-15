@@ -16,6 +16,12 @@ PAGES = [
         "access": access_level['visitor'],
     },
     {
+        "label": "Book Manager",
+        "icon": "📚",
+        "link": "pages/book_manager.py",
+        "access": access_level['admin'],
+    },
+    {
         "label": "divider",
         "access": access_level['friend'],
     },
@@ -24,12 +30,6 @@ PAGES = [
         "icon": "🧐",
         "link": "pages/user_panel.py",
         "access": access_level['friend'],
-    },
-    {
-        "label": "Book Manager",
-        "icon": "📚",
-        "link": "pages/book_manager.py",
-        "access": access_level['admin'],
     },
 ]
 
