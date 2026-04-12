@@ -5,7 +5,6 @@ WORKDIR /app/BogoBots
 RUN apt-get update && apt-get install -y \
     build-essential \
     curl \
-    software-properties-common \
     git \
     vim \
     default-libmysqlclient-dev \

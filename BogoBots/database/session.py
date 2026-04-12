@@ -9,6 +9,11 @@ from BogoBots.database.base import Base  # Import your Base from models
 from BogoBots.models import ( 
     # Import all of your models, so that they can be created all at once
     book,
+    news_source,
+    news_item,
+    news_report,
+    news_report_item,
+    news_hub_config,
 )
 
 

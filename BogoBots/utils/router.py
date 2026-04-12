@@ -22,6 +22,12 @@ PAGES = [
         "access": access_level['admin'],
     },
     {
+        "label": "AI News Hub",
+        "icon": "🤖",
+        "link": "pages/ai_hub.py",
+        "access": access_level['visitor'],
+    },
+    {
         "label": "divider",
         "access": access_level['friend'],
     },
