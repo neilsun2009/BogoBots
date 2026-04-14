@@ -64,25 +64,43 @@ def show_news_item_modal(item_id: int):
                     st.warning("No crawler implementation available for this source.")
         st.text(item.content_raw or "")
 
-    st.markdown("**Summary**")
-    st.write(item.content_summary or "_No summary yet_")
+    can_edit_admin_fields = st.session_state.get('access_level', 0) >= access_level['admin']
+    summary_text = st.text_area(
+        "Summary",
+        value=item.content_summary or "",
+        key=f"summary_{item_id}",
+        height=180,
+        disabled=not can_edit_admin_fields,
+        help="Admins can manually edit and save summary text."
+    )
     
-    if st.button("Regenerate Summary", 
-                 icon=":material/article_shortcut:",
-                 type="tertiary",
-                 key=f"regen_summary_{item_id}"):
-        model_name = item.summary_model or "openai/gpt-5.4-mini"
-        summarize_news_item(item_id, item.title, item.content_raw or "", model_name=model_name)
-        # extract_metadata(item_id, item.title, item.content_raw or "", model_name=model_name)
-        st.success("Summary regenerated.")
-        st.rerun()
+    a1, a2 = st.columns([1, 2])
+    
+    with a1:
+        if st.button("Save Summary",
+                icon=":material/save:",
+                key=f"save_summary_{item_id}",
+                type="tertiary",
+                disabled=not can_edit_admin_fields):
+            NewsItemService.update_item(item_id, content_summary=summary_text)
+            st.success("Summary saved.")
+            st.rerun()
+    with a2:
+        if st.button("Regenerate Summary", 
+                    icon=":material/article_shortcut:",
+                    type="tertiary",
+                    key=f"regen_summary_{item_id}"):
+            model_name = item.summary_model or "openai/gpt-5.4-mini"
+            summarize_news_item(item_id, item.title, item.content_raw or "", model_name=model_name)
+            # extract_metadata(item_id, item.title, item.content_raw or "", model_name=model_name)
+            st.success("Summary regenerated.")
+            st.rerun()
 
-    can_edit_remarks = st.session_state.get('access_level', 0) >= access_level['admin']
     remarks = st.text_area(
         "Remarks",
         value=item.remarks or "",
         key=f"remarks_{item_id}",
-        disabled=not can_edit_remarks
+        disabled=not can_edit_admin_fields
     )
 
     a1, a2, a3 = st.columns(3)
@@ -90,7 +108,7 @@ def show_news_item_modal(item_id: int):
         if st.button("Save Remarks", 
                     icon=":material/save:",
                     key=f"save_remarks_{item_id}",
-                    disabled=not can_edit_remarks):
+                    disabled=not can_edit_admin_fields):
             NewsItemService.update_item(item_id, remarks=remarks)
             st.success("Remarks saved.")
             st.rerun()
@@ -297,15 +315,22 @@ with tab_news:
                 star_icon = "⭐" if item.is_starred else ""
                 title_md = f"**{item.title}**" if not item.is_read else item.title
 
-                c1, c2, c3, c4, c5, c6 = st.columns([8, 1, 1, 1, 1, 1])
+                c1, c2, c3, c4 = st.columns([6, 1, 1, 1])
                 with c1:
                     st.markdown(f"{read_icon} {priority_icon} {star_icon} {title_md}")
-                    st.caption(f"{(item.content_summary or '').strip()[:400]}...")
-                    st.caption(
-                        f"{item.source.name if item.source else 'Unknown'} | "
-                        f"{item.source.news_type if item.source else 'N/A'} | "
-                        f"{item.published_at.strftime('%Y-%m-%d %H:%M')}"
-                    )
+                    s_icon_col, s_text_col = st.columns([1, 11])
+                    with s_icon_col:
+                        if item.source and item.source.icon:
+                            st.image(item.source.icon, width=60)
+                        else:
+                            st.caption("📰")
+                    with s_text_col:
+                        st.caption(f"{(item.content_summary or '').strip()[:400]}...")
+                        st.caption(
+                            f"{item.source.name if item.source else 'Unknown'} | "
+                            f"{item.source.news_type if item.source else 'N/A'} | "
+                            f"{item.published_at.strftime('%Y-%m-%d %H:%M')}"
+                        )
                 with c2:
                     if st.button("Detail", 
                                  icon=":material/article:",
@@ -318,15 +343,6 @@ with tab_news:
                                        icon=":material/open_in_new:",
                                        type="tertiary",
                                        url=item.url)
-                with c4:
-                    star_label = "Unstar" if item.is_starred else "Star"
-                    if st.button(star_label, 
-                                 icon="⭐" if item.is_starred else ":material/star:",
-                                 type="tertiary",
-                                 key=f"news_star_{item.id}_{'arch' if archived else 'imp'}"):
-                        NewsItemService.set_item_starred(item.id, is_starred=not item.is_starred)
-                        st.rerun()
-                with c5:
                     read_label = "Mark as Unread" if item.is_read else "Mark as Read"
                     if st.button(read_label, 
                                  icon=":material/mark_email_unread:" if item.is_read else ":material/mark_email_read:",
@@ -335,7 +351,14 @@ with tab_news:
                         NewsItemService.mark_item_read(item.id, is_read=not item.is_read)
                         st.success("Read status updated.")
                         st.rerun()
-                with c6:
+                with c4:
+                    star_label = "Unstar" if item.is_starred else "Star"
+                    if st.button(star_label, 
+                                 icon="⭐" if item.is_starred else ":material/star:",
+                                 type="tertiary",
+                                 key=f"news_star_{item.id}_{'arch' if archived else 'imp'}"):
+                        NewsItemService.set_item_starred(item.id, is_starred=not item.is_starred)
+                        st.rerun()
                     arc_label = "Release" if item.is_archived else "Archive"
                     if st.button(arc_label, 
                                  icon=":material/archive:",
@@ -388,9 +411,10 @@ with tab_config:
                                     "Last crawl: "
                                     + (s.last_crawled_at.strftime("%Y-%m-%d %H:%M") if s.last_crawled_at else "Never")
                                 )
-                                st.caption(f"Primary: {s.url}")
+                                url_caption = f"Primary: {s.url}"
                                 if s.backup_url:
-                                    st.caption(f"Backup: {s.backup_url}")
+                                    url_caption += f"\n\nBackup: {s.backup_url}"
+                                st.caption(url_caption)
                                 if s.last_error:
                                     st.error(f"Recent error: {s.last_error}")
                                 if st.button(
@@ -412,7 +436,7 @@ with tab_config:
                 new_source_type = st.selectbox("Source Type", options=["RSS"], index=0, disabled=True, )
                 new_news_type = st.selectbox(
                     "News Type",
-                    options=["Website", "WeChat", "GitHub", "HuggingFace"],
+                    options=["AI Company", "Media", "WeChat", "Podcast"],
                     index=0,
                     help="Semantic news category. Additional integration config can be saved in config_json."
                 )

@@ -74,7 +74,7 @@ def run_crawl_for_source(source: NewsSource, since: datetime,
             return stats
         
         # Run crawl
-        crawl_stats = crawler.crawl(since=since, skip_summary=not summarize)
+        crawl_stats = crawler.crawl_with_retry(since=since, skip_summary=not summarize)
         stats.update(crawl_stats)
         
         print(f"[DONE] Fetched: {stats['fetched']}, Saved: {stats['saved']}, "

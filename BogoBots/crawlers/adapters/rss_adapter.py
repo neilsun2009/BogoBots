@@ -16,12 +16,21 @@ class RSSAdapter(BaseNewsCrawler):
     """
     
     source_type = 'RSS'
+
+    def _normalize_to_utc(self, dt: Optional[datetime]) -> Optional[datetime]:
+        """Normalize datetime to timezone-aware UTC."""
+        if dt is None:
+            return None
+        if dt.tzinfo is None:
+            return dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc)
     
     def fetch_new_items(self, since: datetime) -> List[RawNewsItem]:
         """
         Fetch items from RSS feed published after 'since' timestamp.
         """
         items = []
+        since_utc = self._normalize_to_utc(since) or datetime.now(timezone.utc)
         
         # Parse primary RSS feed, fallback to backup when needed
         feed = feedparser.parse(self.news_source.url)
@@ -42,7 +51,8 @@ class RSSAdapter(BaseNewsCrawler):
             external_id = self._get_external_id(entry)
 
             # Parse published date
-            published_at = self._parse_date(entry)
+            published_at = self._normalize_to_utc(self._parse_date(entry))
+            self._emit_progress(f"Published at: {published_at}")
             if not published_at:
                 if missing_pubdate_kept < missing_pubdate_limit:
                     published_at = datetime.now(timezone.utc)
@@ -61,7 +71,7 @@ class RSSAdapter(BaseNewsCrawler):
 
             
             # Skip if older than 'since'
-            if published_at < since:
+            if published_at < since_utc:
                 continue
             
             # Use only structured RSS fields and fetch markdown from r.jina.ai
@@ -104,7 +114,7 @@ class RSSAdapter(BaseNewsCrawler):
         if hasattr(entry, 'published_parsed') and entry.published_parsed:
             parsed = entry.published_parsed
             if isinstance(parsed, tuple):
-                return datetime(*parsed[:6])
+                return datetime(*parsed[:6], tzinfo=timezone.utc)
 
         # fallback for feeds that expose pubDate as text
         for field in ['published', 'pubDate']:

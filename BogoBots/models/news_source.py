@@ -11,7 +11,7 @@ class NewsSource(BaseModel):
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String(100), nullable=False, unique=True, comment='Source name (e.g., "OpenAI Blog")')
     source_type = Column(String(20), nullable=False, default='RSS', comment='Source fetch protocol. RSS only for now')
-    news_type = Column(String(30), nullable=False, default='Website', comment='News domain type: website, twitter, github, wechat, paper, podcast, etc.')
+    news_type = Column(String(30), nullable=False, default='AI Company', comment='News domain type: ai company, media, twitter, github, wechat, paper, podcast, etc.')
     url = Column(String(500), nullable=False, comment='Source URL or endpoint')
     backup_url = Column(String(500), comment='Backup RSS URL')
     icon = Column(String(500), comment='Icon URL for source display')

@@ -140,9 +140,9 @@ class NewsItemService:
                 query = query.filter(NewsItem.is_read == False)
             return query.order_by(
                 NewsItem.is_starred.desc(),
+                NewsItem.published_at.desc(),
                 priority_rank.desc(),
                 NewsItem.relevance_score.desc(),
-                NewsItem.published_at.desc()
             ).limit(limit).all()
         finally:
             session.close()
@@ -198,9 +198,9 @@ class NewsItemService:
 
             items = query.order_by(
                 NewsItem.is_starred.desc(),
+                NewsItem.published_at.desc(),
                 priority_rank.desc(),
                 NewsItem.relevance_score.desc(),
-                NewsItem.published_at.desc()
             ).offset(offset).limit(page_size).all()
 
             return {
