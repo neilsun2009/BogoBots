@@ -6,6 +6,7 @@ from BogoBots.database.session import get_session
 from BogoBots.models.news_report import NewsReport
 from BogoBots.models.news_report_item import NewsReportItem
 from BogoBots.models.news_item import NewsItem
+from sqlalchemy.orm import joinedload
 
 
 class NewsReportService:
@@ -25,7 +26,9 @@ class NewsReportService:
         """Get a report by ID with its items"""
         session = get_session()
         try:
-            return session.query(NewsReport).filter_by(id=report_id).first()
+            return session.query(NewsReport).options(
+                joinedload(NewsReport.items).joinedload(NewsReportItem.news_item)
+            ).filter_by(id=report_id).first()
         finally:
             session.close()
     
@@ -45,13 +48,17 @@ class NewsReportService:
     def create_report(report_date: datetime, title: str = None,
                       editorial: str = None, content: str = None,
                       summary: str = None, news_items: List[int] = None,
-                      llm_model: str = None) -> NewsReport:
+                      llm_model: str = None,
+                      news_from: datetime = None, news_to: datetime = None,
+                      item_meta: Optional[Dict[int, Dict[str, Any]]] = None) -> NewsReport:
         """Create a new report with optional items"""
         session = get_session()
         try:
             # Create report
             report = NewsReport(
                 report_date=report_date,
+                news_from=news_from,
+                news_to=news_to,
                 title=title or f"AI News Report - {report_date.strftime('%Y-%m-%d')}",
                 editorial=editorial,
                 content=content,
@@ -65,12 +72,13 @@ class NewsReportService:
             # Add items if provided
             if news_items:
                 for idx, item_id in enumerate(news_items):
+                    meta = (item_meta or {}).get(item_id, {})
                     report_item = NewsReportItem(
                         report_id=report.id,
                         news_item_id=item_id,
                         order_index=idx,
-                        importance=3,
-                        report_llm_model=llm_model
+                        category=meta.get("category"),
+                        category_rank=meta.get("category_rank", idx + 1),
                     )
                     session.add(report_item)
                     
@@ -105,9 +113,9 @@ class NewsReportService:
     
     @staticmethod
     def add_item_to_report(report_id: int, news_item_id: int, 
-                          order_index: int = None, importance: int = 3,
-                          admin_comment: str = None, custom_summary: str = None,
-                          llm_model: str = None) -> Optional[NewsReportItem]:
+                          order_index: int = None,
+                          category: str = None,
+                          category_rank: int = 1) -> Optional[NewsReportItem]:
         """Add a news item to a report"""
         session = get_session()
         try:
@@ -120,10 +128,8 @@ class NewsReportService:
                 report_id=report_id,
                 news_item_id=news_item_id,
                 order_index=order_index,
-                importance=importance,
-                admin_comment=admin_comment,
-                custom_summary=custom_summary,
-                report_llm_model=llm_model
+                category=category,
+                category_rank=category_rank,
             )
             session.add(report_item)
             
@@ -144,7 +150,7 @@ class NewsReportService:
     
     @staticmethod
     def update_report_item(report_item_id: int, **kwargs) -> Optional[NewsReportItem]:
-        """Update a report item (importance, comment, summary)"""
+        """Update editable fields on a report item"""
         session = get_session()
         try:
             report_item = session.query(NewsReportItem).filter_by(id=report_item_id).first()
@@ -214,6 +220,10 @@ class NewsReportService:
             report = session.query(NewsReport).filter_by(id=report_id).first()
             if not report:
                 return False
+            
+            # Delete all report items
+            for report_item in report.items:
+                session.delete(report_item)
             
             # Reset status of associated news items
             for report_item in report.items:

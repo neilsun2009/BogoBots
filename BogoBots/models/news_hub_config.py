@@ -22,6 +22,25 @@ News items:
 {news_items}
 
 Report:''', comment='Prompt template for report generation')
+    foreword_prompt_template = Column(Text, default='''Write a concise, warm foreword for an AI weekly report titled "{title}" covering {start_date} to {end_date}.
+The foreword should welcome readers and build appetite for reading the detailed report. Keep it around 120-180 words.
+
+Articles by category:
+{articles_by_category}
+''', comment='Prompt template for report foreword generation')
+    translation_prompt_template = Column(Text, default='''Translate the following markdown report into concise professional Chinese.
+Keep markdown structure, links, and section order unchanged.
+
+Title: {title}
+Coverage: {start_date} to {end_date}
+
+Markdown:
+{content}
+''', comment='Prompt template for report translation')
+    foreword_model = Column(String(100), default='openai/gpt-5.4-mini', comment='LLM model for foreword generation')
+    foreword_max_tokens = Column(Integer, default=400, comment='Max tokens for foreword generation')
+    translation_model = Column(String(100), default='openai/gpt-5.4-mini', comment='LLM model for report translation')
+    translation_max_tokens = Column(Integer, default=5000, comment='Max tokens for translation generation')
     max_summary_tokens = Column(Integer, default=200, comment='Max tokens per summary')
     relevance_threshold = Column(Float, default=0.3, comment='Minimum relevance score to include')
     

@@ -12,12 +12,8 @@ class NewsReportItem(BaseModel):
     report_id = Column(Integer, ForeignKey('news_report.id'), nullable=False, comment='FK to news report')
     news_item_id = Column(Integer, ForeignKey('news_item.id'), nullable=False, comment='FK to news item')
     order_index = Column(Integer, default=0, comment='Position in report')
-    importance = Column(Integer, default=3, comment='Importance rating 1-5 stars')
-    admin_comment = Column(Text, comment='Admin comment on this item')
-    custom_summary = Column(Text, comment='Override LLM summary')
-    report_llm_model = Column(String(100), comment='LLM used for report generation')
-    report_tokens_input = Column(Integer, comment='Input tokens for this item')
-    report_tokens_output = Column(Integer, comment='Output tokens for this item')
+    category = Column(String(40), comment='Editorial category in final report')
+    category_rank = Column(Integer, default=1, comment='Rank within category')
     
     # Relationships
     report = relationship("NewsReport", back_populates="items")

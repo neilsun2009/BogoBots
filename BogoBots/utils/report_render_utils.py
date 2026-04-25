@@ -1,0 +1,248 @@
+import re
+from collections import defaultdict
+from html import escape
+
+
+def build_report_markdown(title: str, start_date, end_date, foreword: str, selected_entries: list, category_order: list) -> str:
+    grouped = defaultdict(list)
+    for entry in selected_entries:
+        grouped[entry["category"]].append(entry)
+
+    lines = [
+        f"# {title}",
+        "",
+        f"*Coverage: {start_date} to {end_date}*",
+        "",
+        "**Author: Bogo**",
+        "",
+    ]
+
+    if (foreword or "").strip():
+        lines.extend(["## Foreword", "", foreword.strip(), ""])
+
+    for category in category_order:
+        entries = sorted(grouped.get(category, []), key=lambda x: x["rank"])
+        if not entries:
+            continue
+        lines.extend([f"## {category}", ""])
+        for idx, entry in enumerate(entries, start=1):
+            item = entry["item"]
+            summary = (item.content_summary or "").strip() or "_No summary available_"
+            editor_view = (item.remarks or "").strip()
+            published_at = item.published_at.strftime("%Y-%m-%d %H:%M")
+            news_source = item.source.name if item.source else "Unknown"
+            editor_block = []
+            if editor_view:
+                editor_block = ["> **Editor's remarks:**", ">"]
+                for note_line in editor_view.splitlines():
+                    editor_block.append(f"> {note_line}" if note_line else ">")
+
+            lines.extend([
+                f"### {idx}. {item.title}",
+                "",
+                f"*Published at: {published_at} | Source: {news_source}*",
+                "",
+                f"{summary}",
+                "",
+            ])
+            if editor_block:
+                lines.extend(editor_block + [""])
+            lines.extend([
+                f"[Read more: {item.url}]({item.url})",
+                "",
+                "---",
+                "",
+            ])
+
+    return "\n".join(lines).strip() + "\n"
+
+
+def build_foreword_prompt(title: str, start_date, end_date, selected_entries: list, template: str, category_order: list) -> str:
+    grouped = defaultdict(list)
+    for entry in selected_entries:
+        grouped[entry["category"]].append(entry)
+
+    lines = []
+    for category in category_order:
+        entries = sorted(grouped.get(category, []), key=lambda x: x["rank"])
+        if not entries:
+            continue
+        lines.append(f"{category}:")
+        for entry in entries:
+            item = entry["item"]
+            lines.append(f"- {item.title} | {((item.content_summary or '').strip()[:280] or 'No summary')}")
+        lines.append("")
+
+    return template.format(
+        title=title,
+        start_date=start_date,
+        end_date=end_date,
+        articles_by_category="\n".join(lines),
+    )
+
+
+def extract_foreword_preview(markdown_text: str) -> str:
+    """
+    Extract foreword section preview from report markdown.
+    Supports:
+    - ## Foreword ... ## ...
+    - ## 前言 ... ## ...
+    """
+    text = markdown_text or ""
+    patterns = [
+        (r"##\s*Foreword\b", r"##\s*"),
+        (r"##\s*前言\b", r"##\s*"),
+    ]
+    for start_pat, end_pat in patterns:
+        start = re.search(start_pat, text, flags=re.IGNORECASE)
+        if not start:
+            continue
+        end = re.search(end_pat, text[start.end():], flags=re.IGNORECASE)
+        if end:
+            snippet = text[start.end(): start.end() + end.start()]
+        else:
+            snippet = text[start.end():]
+        snippet = snippet.strip()
+        if snippet:
+            return snippet[:1200] + ("..." if len(snippet) > 1200 else "")
+    return ""
+
+
+def _split_long_tokens(text: str, max_len: int = 70) -> str:
+    """Insert soft breaks into long tokens so HTML layout won't overflow."""
+    tokens = text.split(" ")
+    fixed = []
+    for tok in tokens:
+        if len(tok) <= max_len:
+            fixed.append(tok)
+            continue
+        parts = [tok[i:i + max_len] for i in range(0, len(tok), max_len)]
+        fixed.append("&#8203;".join(parts))
+    return " ".join(fixed)
+
+
+def _format_inline_markdown(text: str) -> str:
+    raw_text = text or ""
+    link_placeholders = {}
+
+    md_link_pattern = re.compile(r"\[([^\]]+)\]\((https?://[^\s)]+)\)")
+    for idx, m in enumerate(md_link_pattern.finditer(raw_text)):
+        label = escape(m.group(1))
+        url = escape(m.group(2), quote=True)
+        token = f"__LINK_TOKEN_{idx}__"
+        link_placeholders[token] = f'<a href="{url}" target="_blank">{label}</a>'
+        raw_text = raw_text.replace(m.group(0), token, 1)
+
+    bare_url_pattern = re.compile(r"(?<![\"'=\(])(https?://[^\s<]+)")
+    bare_idx_base = len(link_placeholders)
+    for idx, m in enumerate(bare_url_pattern.finditer(raw_text)):
+        url_raw = m.group(1).rstrip(".,);")
+        trailing = m.group(1)[len(url_raw):]
+        url = escape(url_raw, quote=True)
+        token = f"__LINK_TOKEN_{bare_idx_base + idx}__"
+        link_placeholders[token] = f'<a href="{url}" target="_blank">{url}</a>{escape(trailing)}'
+        raw_text = raw_text.replace(m.group(1), token, 1)
+
+    text = escape(raw_text)
+    text = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", text)
+    text = re.sub(r"\*(.+?)\*", r"<em>\1</em>", text)
+    text = re.sub(r"`(.+?)`", r"<code>\1</code>", text)
+
+    for token, html in link_placeholders.items():
+        text = text.replace(escape(token), html)
+
+    return _split_long_tokens(text)
+
+
+def markdown_to_html(markdown_text: str, report_title: str = "AI Report") -> str:
+    lines = (markdown_text or "").splitlines()
+    html_parts = []
+    in_list = False
+
+    i = 0
+    while i < len(lines):
+        line = lines[i].rstrip()
+        stripped = line.strip()
+
+        if not stripped:
+            if in_list:
+                html_parts.append("</ul>")
+                in_list = False
+            i += 1
+            continue
+
+        if stripped.startswith("# "):
+            if in_list:
+                html_parts.append("</ul>")
+                in_list = False
+            html_parts.append(f"<h1>{_format_inline_markdown(stripped[2:])}</h1>")
+        elif stripped.startswith("## "):
+            if in_list:
+                html_parts.append("</ul>")
+                in_list = False
+            html_parts.append(f"<h2>{_format_inline_markdown(stripped[3:])}</h2>")
+        elif stripped.startswith("### "):
+            if in_list:
+                html_parts.append("</ul>")
+                in_list = False
+            html_parts.append(f"<h3>{_format_inline_markdown(stripped[4:])}</h3>")
+        elif stripped.startswith("- "):
+            if not in_list:
+                html_parts.append("<ul>")
+                in_list = True
+            html_parts.append(f"<li>{_format_inline_markdown(stripped[2:])}</li>")
+        elif stripped.startswith(">"):
+            if in_list:
+                html_parts.append("</ul>")
+                in_list = False
+            quote_lines = []
+            while i < len(lines):
+                candidate = lines[i].rstrip()
+                candidate_stripped = candidate.strip()
+                if not candidate_stripped.startswith(">"):
+                    break
+                quote_text = re.sub(r"^>\s?", "", candidate_stripped)
+                quote_lines.append(_format_inline_markdown(quote_text))
+                i += 1
+            html_parts.append(f"<blockquote>{'<br/>'.join(quote_lines)}</blockquote>")
+            continue
+        elif stripped == "---":
+            if in_list:
+                html_parts.append("</ul>")
+                in_list = False
+            html_parts.append("<hr/>")
+        else:
+            if in_list:
+                html_parts.append("</ul>")
+                in_list = False
+            html_parts.append(f"<p>{_format_inline_markdown(stripped)}</p>")
+        i += 1
+
+    if in_list:
+        html_parts.append("</ul>")
+
+    style = """
+    <style>
+      body { color: #222; line-height: 1.55; margin: 18px; }
+      h1 { font-size: 40px; margin: 0 0 10px 0; color: #111; }
+      h2 { font-size: 32px; margin: 32px 0 16px 0; color: #1f2937; padding-bottom: 4px; border-left: 6px solid #51bad9; padding-left: 12px;}
+      h3 { font-size: 20px; margin: 14px 0 6px 0; color: #111827; }
+      p { margin: 6px 0; }
+      ul { margin: 6px 0 10px 18px; }
+      li { margin: 4px 0; }
+      a { font-style: italic; text-decoration: underline; color: #51bad9; font-size: 12px;}
+      em { color: #999; font-size: 12px; }
+      blockquote { margin: 24px 0; padding: 16px 10px; border-left: 3px solid #374151; color: #374151; background: #f9fafb; }
+      code { background: #f3f4f6; padding: 1px 4px; border-radius: 3px; }
+      hr { border: none; border-top: 1px solid #e5e7eb; margin: 16px 0 24px; }
+    </style>
+    """
+
+    body_html = "\n".join(html_parts)
+    return (
+        f"<html><head><meta charset='utf-8'><title>{escape(report_title)} | BogoBogo.me</title>{style}"
+        "<link rel='preconnect' href='https://fonts.googleapis.com'>"
+        "<link rel='preconnect' href='https://fonts.gstatic.com' crossorigin>"
+        "<link href='https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@100..900&display=swap' rel='stylesheet'></head>"
+        f"<body style='font-family: Noto Sans SC, sans-serif;'>{body_html}</body></html>"
+    )

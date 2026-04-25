@@ -85,12 +85,9 @@ class BaseNewsCrawler(ABC):
         Check if a news item already exists.
         Uses external_id if available, or title + published_at combination.
         """
-        # Check by external_id if available
+        # Check by external_id globally across all sources.
         if external_id:
-            existing = self.session.query(NewsItem).filter_by(
-                source_id=self.news_source.id,
-                external_id=external_id
-            ).first()
+            existing = self.session.query(NewsItem).filter_by(external_id=external_id).first()
             if existing:
                 return True
         

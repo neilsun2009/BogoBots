@@ -158,6 +158,8 @@ class NewsItemService:
         news_types: Optional[List[str]] = None,
         start_time: Optional[datetime] = None,
         end_time: Optional[datetime] = None,
+        title_query: Optional[str] = None,
+        sort_by: str = "Date",
     ) -> Dict[str, Any]:
         """
         Ranked feed with pagination + filters.
@@ -190,18 +192,33 @@ class NewsItemService:
                 query = query.filter(NewsItem.published_at >= start_time)
             if end_time:
                 query = query.filter(NewsItem.published_at <= end_time)
+            if title_query:
+                keyword = title_query.strip()
+                if keyword:
+                    query = query.filter(NewsItem.title.ilike(f"%{keyword}%"))
 
             total = query.count()
             total_pages = max(1, (total + page_size - 1) // page_size)
             page = max(1, min(page, total_pages))
             offset = (page - 1) * page_size
 
-            items = query.order_by(
-                NewsItem.is_starred.desc(),
-                NewsItem.published_at.desc(),
-                priority_rank.desc(),
-                NewsItem.relevance_score.desc(),
-            ).offset(offset).limit(page_size).all()
+            if sort_by == "Priority":
+                order_columns = [
+                    priority_rank.desc(),
+                    NewsItem.is_starred.desc(),
+                    NewsItem.published_at.desc(),
+                    NewsItem.relevance_score.desc(),
+                ]
+            else:
+                # default: latest datetime first
+                order_columns = [
+                    NewsItem.published_at.desc(),
+                    priority_rank.desc(),
+                    NewsItem.is_starred.desc(),
+                    NewsItem.relevance_score.desc(),
+                ]
+
+            items = query.order_by(*order_columns).offset(offset).limit(page_size).all()
 
             return {
                 "items": items,

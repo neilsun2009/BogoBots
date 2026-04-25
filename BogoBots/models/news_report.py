@@ -10,6 +10,8 @@ class NewsReport(BaseModel):
     
     id = Column(Integer, primary_key=True, autoincrement=True)
     report_date = Column(DateTime, nullable=False, index=True, comment='Date of report')
+    news_from = Column(DateTime, comment='Included news start datetime')
+    news_to = Column(DateTime, comment='Included news end datetime')
     title = Column(String(300), comment='Generated report title')
     editorial = Column(Text, comment='Editorial opening for report')
     content = Column(Text, comment='Editable final report content')

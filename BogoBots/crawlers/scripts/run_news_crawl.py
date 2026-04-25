@@ -24,6 +24,9 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
 import argparse
+import json
+import subprocess
+import tempfile
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List
 
@@ -92,6 +95,82 @@ def run_crawl_for_source(source: NewsSource, since: datetime,
     return stats
 
 
+def run_source_in_subprocess(source: NewsSource, args) -> Dict:
+    """
+    Run a single source crawl in a child Python process.
+    This isolates memory usage so RSS parsing/LLM work is released per source.
+    """
+    stats = {
+        'source_name': source.name,
+        'source_type': source.source_type,
+        'fetched': 0,
+        'saved': 0,
+        'duplicates': 0,
+        'errors': 0,
+        'summarized': 0
+    }
+
+    temp_stats_file = None
+    try:
+        with tempfile.NamedTemporaryFile(prefix=f"aihub_source_{source.id}_", suffix=".json", delete=False) as tf:
+            temp_stats_file = tf.name
+
+        cmd = [
+            sys.executable,
+            "-u",
+            "-P",
+            "-m",
+            "BogoBots.crawlers.scripts.run_news_crawl",
+            "--source-id",
+            str(source.id),
+            "--days",
+            str(args.days),
+            "--stats-file",
+            temp_stats_file,
+        ]
+        if args.summarize:
+            cmd.append("--summarize")
+        if args.dry_run:
+            cmd.append("--dry-run")
+        if args.verbose:
+            cmd.append("--verbose")
+
+        print(f"\n[ISOLATED] Launching subprocess for source #{source.id} '{source.name}'")
+
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+        )
+        if proc.stdout:
+            for line in proc.stdout:
+                print(f"[source:{source.id}] {line}", end="")
+        return_code = proc.wait()
+
+        if temp_stats_file and os.path.exists(temp_stats_file):
+            with open(temp_stats_file, "r", encoding="utf-8") as f:
+                child_stats = json.load(f)
+                if isinstance(child_stats, dict):
+                    stats.update(child_stats)
+
+        if return_code != 0 and stats.get("errors", 0) == 0:
+            stats["errors"] = 1
+
+    except Exception as e:
+        print(f"[ERROR] Subprocess crawl failed for source #{source.id} '{source.name}': {e}")
+        stats["errors"] += 1
+    finally:
+        if temp_stats_file and os.path.exists(temp_stats_file):
+            try:
+                os.remove(temp_stats_file)
+            except Exception:
+                pass
+
+    return stats
+
+
 def main():
     parser = argparse.ArgumentParser(
         description='Crawl AI news sources and save to database'
@@ -122,6 +201,16 @@ def main():
         action='store_true',
         help='Verbose output'
     )
+    parser.add_argument(
+        '--isolated-sources',
+        action='store_true',
+        help='Run each source in a separate Python process to reduce peak memory'
+    )
+    parser.add_argument(
+        '--stats-file',
+        type=str,
+        help='Internal use: write run stats as JSON to this file'
+    )
     
     args = parser.parse_args()
     
@@ -129,7 +218,10 @@ def main():
     print("BogoBots AI Hub - News Crawler")
     print("=" * 60)
     print(f"Started at: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}")
-    print(f"Options: days={args.days}, summarize={args.summarize}, dry_run={args.dry_run}")
+    print(
+        f"Options: days={args.days}, summarize={args.summarize}, dry_run={args.dry_run}, "
+        f"isolated_sources={args.isolated_sources}"
+    )
     
     # Calculate lookback period, set hour/minute/second/microsecond to 00:00
     since = (datetime.now(timezone.utc) - timedelta(days=args.days)).replace(hour=0, minute=0, second=0, microsecond=0)
@@ -152,13 +244,19 @@ def main():
     
     # Run crawl for each source
     all_stats = []
-    for source in sources:
-        stats = run_crawl_for_source(
-            source, since, 
-            summarize=args.summarize,
-            dry_run=args.dry_run
-        )
-        all_stats.append(stats)
+    if args.isolated_sources and not args.source_id:
+        print("[MODE] Isolated per-source subprocess mode enabled")
+        for source in sources:
+            stats = run_source_in_subprocess(source, args)
+            all_stats.append(stats)
+    else:
+        for source in sources:
+            stats = run_crawl_for_source(
+                source, since, 
+                summarize=args.summarize,
+                dry_run=args.dry_run
+            )
+            all_stats.append(stats)
     
     # Summary
     print("\n" + "=" * 60)
@@ -181,6 +279,43 @@ def main():
         status = "✓" if stats['errors'] == 0 else "✗"
         print(f"  {status} {stats['source_name']}: "
               f"{stats['saved']} saved, {stats['duplicates']} dupes")
+
+    if args.stats_file:
+        try:
+            with open(args.stats_file, "w", encoding="utf-8") as f:
+                if all_stats:
+                    if len(all_stats) == 1:
+                        json.dump(all_stats[0], f, ensure_ascii=False)
+                    else:
+                        json.dump(
+                            {
+                                "source_name": "all_sources",
+                                "source_type": "mixed",
+                                "fetched": total_fetched,
+                                "saved": total_saved,
+                                "duplicates": total_dupes,
+                                "errors": total_errors,
+                                "summarized": sum(s.get("summarized", 0) for s in all_stats),
+                            },
+                            f,
+                            ensure_ascii=False,
+                        )
+                else:
+                    json.dump(
+                        {
+                            "source_name": "none",
+                            "source_type": "none",
+                            "fetched": 0,
+                            "saved": 0,
+                            "duplicates": 0,
+                            "errors": 0,
+                            "summarized": 0,
+                        },
+                        f,
+                        ensure_ascii=False,
+                    )
+        except Exception as e:
+            print(f"[WARN] Failed to write stats file '{args.stats_file}': {e}")
     
     print(f"\nFinished at: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}")
     

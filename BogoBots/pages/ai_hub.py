@@ -11,7 +11,13 @@ from BogoBots.configs.access import access_level
 from BogoBots.configs.models import available_models
 from BogoBots.utils.router import render_toc
 from BogoBots.utils.streamlit_utils import render_unlock_form
-from BogoBots.utils.llm_utils import get_model_price, summarize_news_item, extract_metadata, generate_report_summary
+from BogoBots.utils.llm_utils import get_model_price, summarize_news_item, extract_metadata, _chat_completion
+from BogoBots.utils.report_render_utils import (
+    build_report_markdown,
+    build_foreword_prompt,
+    extract_foreword_preview,
+    markdown_to_html,
+)
 
 from BogoBots.services.news_source_service import NewsSourceService
 from BogoBots.services.news_item_service import NewsItemService
@@ -118,7 +124,8 @@ def show_news_item_modal(item_id: int):
         if st.button(star_label, 
                      icon="⭐" if item.is_starred else ":material/star:",
                      type="tertiary",
-                     key=f"star_{item_id}"):
+                     key=f"star_{item_id}",
+                     disabled=not can_edit_admin_fields):
             NewsItemService.set_item_starred(item_id, is_starred=not item.is_starred)
             st.success("Star status updated.")
             st.rerun()
@@ -127,7 +134,8 @@ def show_news_item_modal(item_id: int):
         if st.button(archive_label, 
                      icon=":material/archive:",
                      type="tertiary",
-                     key=f"archive_{item_id}"):
+                     key=f"archive_{item_id}",
+                     disabled=not can_edit_admin_fields):
             NewsItemService.set_item_archived(item_id, is_archived=not item.is_archived)
             st.success("Archive status updated.")
             st.rerun()  
@@ -191,6 +199,46 @@ def show_source_edit_modal(source_id: int):
             else:
                 st.error("Failed to delete source")
 
+
+REPORT_CATEGORY_ORDER = ["Top Story", "New Model", "Deep Focus", "Trending", "Fun Stuff"]
+
+
+def suggest_report_category(item) -> str:
+    title = (item.title or "").lower()
+    news_type = (item.source.news_type if item.source else "").lower()
+    priority = (item.source.priority if item.source else "").lower()
+
+    if priority == "high":
+        return "New Model"
+    if any(k in title for k in ["model", "checkpoint", "release", "weights", "llm"]):
+        return "New Model"
+    if any(k in title for k in ["paper", "research", "benchmark", "method", "survey"]):
+        return "Deep Focus"
+    return "Trending"
+
+
+@st.dialog("Edit Report", width="large")
+def show_report_edit_modal(report_id: int):
+    report = NewsReportService.get_report_by_id(report_id)
+    if not report:
+        st.error("Report not found")
+        return
+    if st.session_state.get('access_level', 0) < access_level['admin']:
+        st.warning("Admin access required.")
+        return
+
+    title = st.text_input("Report Title", value=report.title or "", key=f"modal_report_title_{report_id}")
+    content = st.text_area("Markdown Content", value=report.content or "", height=360, key=f"modal_report_content_{report_id}")
+
+    if st.button("Save Report", icon=":material/save:", key=f"modal_save_report_{report_id}"):
+        NewsReportService.update_report(
+            report_id,
+            title=title,
+            content=content,
+        )
+        st.success("Report updated.")
+        st.rerun()
+
 # Sidebar navigation
 with st.sidebar:
     render_toc()
@@ -216,6 +264,7 @@ tab_news, tab_crawl, tab_report, tab_config = st.tabs(
 # ============= LATEST NEWS TAB =============
 with tab_news:
     st.subheader("Latest News Items")
+    is_admin = st.session_state.get('access_level', 0) >= access_level['admin']
 
     all_sources = NewsSourceService.get_all_sources()
     source_name_to_id = {s.name: s.id for s in all_sources}
@@ -230,13 +279,20 @@ with tab_news:
             value=(datetime.now(timezone.utc) - timedelta(days=7)).date(),
             key="news_tab_from_date",
         )
-        filter_unread_only = st.checkbox("Unread only", value=False, key="news_tab_unread_only")
+        filter_title_query = st.text_input("Search", value="", key="news_tab_title_query",
+                                           placeholder="Search keywords in title")
         
     with f2:
         filter_end_date = st.date_input(
             "To date",
             value=datetime.now(timezone.utc).date(),
             key="news_tab_to_date",
+        )
+        filter_sort_by = st.selectbox(
+            "Sort by",
+            options=["Date", "Priority"],
+            index=0,
+            key="news_tab_sort_by",
         )
     with f3:
         filter_news_types = st.multiselect(
@@ -245,6 +301,7 @@ with tab_news:
             default=[],
             key="news_tab_news_types",
         )
+        filter_type = st.pills('Filter by', options=['Unread only', 'Star only'], key="news_tab_filter_type")
     with f4:
         filter_sources = st.multiselect(
             "Sources",
@@ -265,11 +322,14 @@ with tab_news:
             page=current_page_input,
             page_size=filter_page_size,
             unread_only=unread_only,
+            starred_only=(filter_type == 'Star only'),
             archived=archived,
             source_ids=[source_name_to_id[s] for s in filter_sources] if filter_sources else None,
             news_types=filter_news_types if filter_news_types else None,
             start_time=datetime.combine(filter_start_date, datetime.min.time()),
             end_time=datetime.combine(filter_end_date, datetime.max.time()),
+            title_query=filter_title_query,
+            sort_by=filter_sort_by,
         )
 
         items = query_result["items"]
@@ -347,7 +407,8 @@ with tab_news:
                     if st.button(read_label, 
                                  icon=":material/mark_email_unread:" if item.is_read else ":material/mark_email_read:",
                                  type="tertiary",
-                                 key=f"toggle_read_{item.id}_{'arch' if archived else 'imp'}"):
+                                 key=f"toggle_read_{item.id}_{'arch' if archived else 'imp'}",
+                                 disabled=not is_admin):
                         NewsItemService.mark_item_read(item.id, is_read=not item.is_read)
                         st.success("Read status updated.")
                         st.rerun()
@@ -356,14 +417,16 @@ with tab_news:
                     if st.button(star_label, 
                                  icon="⭐" if item.is_starred else ":material/star:",
                                  type="tertiary",
-                                 key=f"news_star_{item.id}_{'arch' if archived else 'imp'}"):
+                                 key=f"news_star_{item.id}_{'arch' if archived else 'imp'}",
+                                 disabled=not is_admin):
                         NewsItemService.set_item_starred(item.id, is_starred=not item.is_starred)
                         st.rerun()
                     arc_label = "Release" if item.is_archived else "Archive"
                     if st.button(arc_label, 
                                  icon=":material/archive:",
                                  type="tertiary",
-                                 key=f"news_arc_{item.id}_{'arch' if archived else 'imp'}"):
+                                 key=f"news_arc_{item.id}_{'arch' if archived else 'imp'}",
+                                 disabled=not is_admin):
                         NewsItemService.set_item_archived(item.id, is_archived=not item.is_archived)
                         st.rerun()
             display_pagination(key_suffix='bottom')
@@ -371,9 +434,9 @@ with tab_news:
     latest_subtab_important, latest_subtab_archived = st.tabs(["Important", "Archived"])
 
     with latest_subtab_important:
-        render_news_list(archived=False, unread_only=filter_unread_only)
+        render_news_list(archived=False, unread_only=(filter_type == 'Unread only'))
     with latest_subtab_archived:
-        render_news_list(archived=True, unread_only=filter_unread_only)
+        render_news_list(archived=True, unread_only=(filter_type == 'Unread only'))
 
 # ============= CONFIG TAB =============
 with tab_config:
@@ -510,64 +573,107 @@ with tab_config:
                     for model in group['models']:
                         model_options.append(f"{group['open_router_prefix']}/{model['api_name']}")
                 
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    st.markdown("**Summary Model**")
+                # Row 1: Summary
+                st.markdown("### Summary")
+                s_left, s_right = st.columns([1, 1])
+                with s_left:
                     summary_model = st.selectbox(
-                        "Default model for news summarization",
+                        "Summary model",
                         options=model_options,
                         index=model_options.index(config.default_summary_model) if config.default_summary_model in model_options else 0
                     )
-                    summary_provider = "Qwen" if summary_model.startswith("qwen/") else "OpenRouter"
-                    summary_price = get_model_price(summary_model, summary_provider)
+                    summary_price = get_model_price(summary_model, 'OpenRouter')
                     if summary_price:
                         st.caption("Summary model price")
                         st.json(summary_price)
                     else:
                         st.caption("Summary model price unavailable")
-                    
-                    st.markdown("**Report Model**")
-                    report_model = st.selectbox(
-                        "Default model for report generation",
-                        options=model_options,
-                        index=model_options.index(config.default_report_model) if config.default_report_model in model_options else 0
-                    )
-                    report_provider = "Qwen" if report_model.startswith("qwen/") else "OpenRouter"
-                    report_price = get_model_price(report_model, report_provider)
-                    if report_price:
-                        st.caption("Report model price")
-                        st.json(report_price)
-                    else:
-                        st.caption("Report model price unavailable")
-                    
-                    max_tokens = st.slider("Max summary tokens", 50, 500, config.max_summary_tokens)
-                    relevance_threshold = st.slider("Relevance threshold", 0.0, 1.0, config.relevance_threshold, 0.05)
-                
-                with col2:
-                    st.markdown("**Summary Prompt Template**")
+                    # max_tokens = st.slider("Summary max tokens", 50, 500, int(config.max_summary_tokens or 200))
+                    # relevance_threshold = st.slider(
+                    #     "Relevance threshold",
+                    #     0.0,
+                    #     1.0,
+                    #     float(getattr(config, "relevance_threshold", 0.3) or 0.3),
+                    #     0.05,
+                    # )
+                with s_right:
                     summary_template = st.text_area(
-                        "Template for summarizing news items",
+                        "Summary prompt template",
                         value=config.summary_prompt_template,
-                        height=200,
+                        height=190,
                         help="Use {title} and {content} as placeholders"
                     )
-                    
-                    st.markdown("**Report Prompt Template**")
-                    report_template = st.text_area(
-                        "Template for generating reports",
-                        value=config.report_prompt_template,
-                        height=200,
-                        help="Use {news_items} as placeholder"
+
+                # Row 2: Foreword
+                st.markdown("### Foreword")
+                f_left, f_right = st.columns([1, 1])
+                with f_left:
+                    foreword_model = st.selectbox(
+                        "Foreword model",
+                        options=model_options,
+                        index=model_options.index(getattr(config, "foreword_model", "openai/gpt-5.4-mini"))
+                        if getattr(config, "foreword_model", "openai/gpt-5.4-mini") in model_options else 0,
+                    )
+                    foreword_price = get_model_price(foreword_model, 'OpenRouter')
+                    if foreword_price:
+                        st.caption("Foreword model price")
+                        st.json(foreword_price)
+                    # foreword_max_tokens = st.slider(
+                    #     "Foreword max tokens",
+                    #     min_value=100,
+                    #     max_value=3000,
+                    #     value=int(getattr(config, "foreword_max_tokens", 400) or 400),
+                    #     step=50,
+                    # )
+                with f_right:
+                    foreword_template = st.text_area(
+                        "Foreword prompt template",
+                        value=getattr(config, "foreword_prompt_template", "") or "",
+                        height=190,
+                        help="Use {title}, {start_date}, {end_date}, {articles_by_category}."
+                    )
+
+                # Row 3: Translation
+                st.markdown("### Translation")
+                t_left, t_right = st.columns([1, 1])
+                with t_left:
+                    translation_model = st.selectbox(
+                        "Translation model",
+                        options=model_options,
+                        index=model_options.index(getattr(config, "translation_model", "openai/gpt-5.4-mini"))
+                        if getattr(config, "translation_model", "openai/gpt-5.4-mini") in model_options else 0,
+                    )
+                    translation_price = get_model_price(translation_model, 'OpenRouter')
+                    if translation_price:
+                        st.caption("Translation model price")
+                        st.json(translation_price)
+                    # translation_max_tokens = st.slider(
+                    #     "Translation max tokens",
+                    #     min_value=500,
+                    #     max_value=10000,
+                    #     value=int(getattr(config, "translation_max_tokens", 5000) or 5000),
+                    #     step=100,
+                    # )
+                with t_right:
+                    translation_template = st.text_area(
+                        "Translation prompt template",
+                        value=getattr(config, "translation_prompt_template", ""),
+                        height=190,
+                        help="Use {title}, {start_date}, {end_date}, {content}."
                     )
                 
                 if st.button("Save LLM Configuration", type="primary"):
                     config.default_summary_model = summary_model
-                    config.default_report_model = report_model
                     config.summary_prompt_template = summary_template
-                    config.report_prompt_template = report_template
-                    config.max_summary_tokens = max_tokens
-                    config.relevance_threshold = relevance_threshold
+                    config.report_prompt_template = foreword_template
+                    config.foreword_prompt_template = foreword_template
+                    config.translation_prompt_template = translation_template
+                    config.foreword_model = foreword_model
+                    # config.foreword_max_tokens = foreword_max_tokens
+                    config.translation_model = translation_model
+                    # config.translation_max_tokens = translation_max_tokens
+                    # config.max_summary_tokens = max_tokens
+                    # config.relevance_threshold = relevance_threshold
                     config.updated_at = datetime.now(timezone.utc)
                     session.commit()
                     st.success("Configuration saved!")
@@ -714,123 +820,262 @@ with tab_report:
     st.header("AI News Reports")
     
     reports = NewsReportService.get_all_reports(limit=10)
+    is_admin = st.session_state.get('access_level', 0) >= access_level['admin']
     
     # Report generation section
     st.subheader("Generate New Report")
-    if st.session_state.get('access_level', 0) < access_level['admin']:
+    if not is_admin:
         st.info("Admin access required for report generation.")
     else:
+        cfg_session = get_session()
+        try:
+            report_cfg = NewsHubConfig.get_or_create(cfg_session)
+            foreword_prompt_template = (getattr(report_cfg, "foreword_prompt_template", "") or "").strip()
+            translation_prompt_template = (getattr(report_cfg, "translation_prompt_template", "") or "").strip()
+            foreword_model = (getattr(report_cfg, "foreword_model", "") or "openai/gpt-5.4-mini").strip()
+            translation_model = (getattr(report_cfg, "translation_model", "") or "openai/gpt-5.4-mini").strip()
+            foreword_max_tokens = int(getattr(report_cfg, "foreword_max_tokens", 400) or 400)
+            translation_max_tokens = int(getattr(report_cfg, "translation_max_tokens", 5000) or 5000)
+        finally:
+            cfg_session.close()
+
         col1, col2, col3 = st.columns(3)
         with col1:
             report_date = st.date_input("Report Date", datetime.now(timezone.utc).date())
         with col2:
-            start_date = st.date_input("News From", datetime.now(timezone.utc).date() - timedelta(days=1))
+            start_date = st.date_input("News From", datetime.now(timezone.utc).date() - timedelta(days=7))
         with col3:
             end_date = st.date_input("News To", datetime.now(timezone.utc).date())
 
-        report_title = st.text_input("Report Title", value=f"Daily Report - {report_date}")
-        editorial = st.text_area("Editorial (optional)", value="", height=100)
-        use_ai_summary = st.checkbox("Use AI to draft report summary/content", value=True)
+        report_title = st.text_input(
+            "Report Title",
+            value=f"AI News Weekly Report ({start_date} to {end_date})"
+        )
 
-        # Get candidate items (starred only)
+        # Candidate items (starred only), display by published date ASC.
         start_dt = datetime.combine(start_date, datetime.min.time())
         end_dt = datetime.combine(end_date, datetime.max.time())
-        candidate_items = NewsItemService.get_starred_items_for_report(start_dt, end_dt)
+        candidate_items = sorted(
+            NewsItemService.get_starred_items_for_report(start_dt, end_dt),
+            key=lambda i: i.published_at
+        )
 
         st.write(f"Found {len(candidate_items)} starred candidate items")
 
-        selected_items = []
+        selected_entries = []
         if candidate_items:
             st.write("**Select starred items to include:**")
             for item in candidate_items:
-                col_check, col_info = st.columns([1, 10])
+                default_cat = suggest_report_category(item)
+                col_check, col_info, col_cat, col_rank = st.columns([1, 16, 4, 1])
                 with col_check:
-                    include = st.checkbox("Include", key=f"include_{item.id}", value=True)
+                    include = st.checkbox("Include", key=f"include_{item.id}", value=True, label_visibility="collapsed")
                 with col_info:
-                    st.write(f"⭐ **{item.title}** ({item.source.name if item.source else 'Unknown'})")
-                    st.caption(f"Published: {item.published_at.strftime('%Y-%m-%d %H:%M')}")
-                    if item.content_summary:
-                        st.caption(f"Summary: {item.content_summary[:120]}...")
+                    st.write(f"⭐ **{item.title}**")
+                    s_icon_col, s_text_col = st.columns([1, 14])
+                    with s_icon_col:
+                        if item.source and item.source.icon:
+                            st.image(item.source.icon, width=40)
+                        else:
+                            st.caption("📰")
+                    with s_text_col:
+                        if item.content_summary:
+                            st.caption(item.content_summary[:400])
+                        st.caption(
+                            f"{item.source.name if item.source else 'Unknown'} | "
+                            f"{item.source.news_type if item.source else 'N/A'} | "
+                            f"{item.published_at.strftime('%Y-%m-%d %H:%M')}"
+                        )
+                with col_cat:
+                    category = st.selectbox(
+                        "Category",
+                        options=REPORT_CATEGORY_ORDER,
+                        index=REPORT_CATEGORY_ORDER.index(default_cat),
+                        key=f"report_cat_{item.id}",
+                        label_visibility="collapsed",
+                    )
+                with col_rank:
+                    rank = st.number_input(
+                        "Rank",
+                        min_value=1,
+                        value=1,
+                        step=1,
+                        key=f"report_rank_{item.id}",
+                        label_visibility="collapsed",
+                    )
                 if include:
-                    selected_items.append(item.id)
+                    selected_entries.append({"item": item, "category": category, "rank": int(rank)})
         else:
             st.info("No starred items in range. Star items in Latest News first.")
 
-        report_content = st.text_area(
-            "Editable Final Report Content",
-            value="",
-            height=220,
-            help="You can edit this before generating report."
-        )
-        if use_ai_summary and selected_items and st.button("Draft AI Report Content", type="secondary"):
-            ai_items = [i for i in candidate_items if i.id in selected_items]
-            drafted = generate_report_summary(ai_items, model_name="openai/gpt-5.4-mini")
-            if editorial.strip():
-                drafted = f"{editorial.strip()}\n\n{drafted}"
-            st.session_state["drafted_report_content"] = drafted
-            st.rerun()
-        if "drafted_report_content" in st.session_state:
-            report_content = st.text_area(
-                "Editable Final Report Content (drafted)",
-                value=st.session_state["drafted_report_content"],
-                height=260,
-                key="final_report_content_drafted",
-            )
+        st.markdown("---")
 
-        if selected_items and st.button("📄 Generate Report", type="primary"):
+        foreword_key = "report_foreword_text"
+        if foreword_key not in st.session_state:
+            st.session_state[foreword_key] = ""
+        if selected_entries and st.button("✨ Generate Foreword by AI", type="tertiary"):
+            if not foreword_prompt_template:
+                st.warning("Foreword prompt template is empty. Please configure it in Config > LLM Configuration.")
+            else:
+                prompt = build_foreword_prompt(
+                    report_title,
+                    start_date,
+                    end_date,
+                    selected_entries,
+                    template=foreword_prompt_template,
+                    category_order=REPORT_CATEGORY_ORDER,
+                )
+                generated, _, _ = _chat_completion(
+                    foreword_model,
+                    prompt,
+                    # max_tokens=foreword_max_tokens,
+                    temperature=0.5
+                )
+                st.session_state[foreword_key] = generated.strip()
+                st.rerun()
+
+        foreword_text = st.text_area("Foreword by Editor", height=120, key=foreword_key)
+
+        if selected_entries and st.button("📄 Generate Report", type="primary"):
             with st.spinner("Generating report..."):
+                selected_entries_sorted = sorted(
+                    selected_entries,
+                    key=lambda x: (REPORT_CATEGORY_ORDER.index(x["category"]), x["rank"], x["item"].published_at),
+                )
+                report_markdown = build_report_markdown(
+                    report_title,
+                    start_date,
+                    end_date,
+                    foreword_text,
+                    selected_entries_sorted,
+                    category_order=REPORT_CATEGORY_ORDER,
+                )
+                selected_ids = [e["item"].id for e in selected_entries_sorted]
+                item_meta = {
+                    e["item"].id: {"category": e["category"], "category_rank": e["rank"]}
+                    for e in selected_entries_sorted
+                }
                 report = NewsReportService.create_report(
                     report_date=datetime.combine(report_date, datetime.min.time()),
                     title=report_title,
-                    editorial=editorial or None,
-                    content=report_content or None,
-                    summary=report_content or None,
-                    news_items=selected_items
+                    editorial=foreword_text or None,
+                    content=report_markdown,
+                    summary=report_markdown,
+                    news_items=selected_ids,
+                    news_from=start_dt,
+                    news_to=end_dt,
+                    item_meta=item_meta,
                 )
-                st.success(f"Report created with ID: {report.id}")
+                st.success(f"Report created!")
                 st.rerun()
     
     # Existing reports
-    st.divider()
     st.subheader("Existing Reports")
     
     if reports:
         for report in reports:
-            with st.expander(f"📰 {report.title} ({report.report_date.strftime('%Y-%m-%d')}) - {report.status}"):
-                st.write(f"**Status:** {report.status}")
-                st.write(f"**Items:** {report.news_count}")
-                if report.editorial:
-                    st.write("**Editorial:**")
-                    st.write(report.editorial)
+            with st.expander(report.title):
+                report_md = report.content or report.summary or ""
+                foreword_preview = extract_foreword_preview(report_md)
                 
-                if report.summary:
-                    st.write("**Summary:**")
-                    st.write(report.summary)
-                if report.content:
-                    st.write("**Final Report Content:**")
-                    st.write(report.content)
-                if st.session_state.get('access_level', 0) >= access_level['admin']:
-                    editable_title = st.text_input("Edit Title", value=report.title or "", key=f"edit_report_title_{report.id}")
-                    editable_editorial = st.text_area("Edit Editorial", value=report.editorial or "", key=f"edit_report_editorial_{report.id}", height=80)
-                    editable_content = st.text_area("Edit Final Report", value=report.content or report.summary or "", key=f"edit_report_content_{report.id}", height=180)
-                    if st.button("Save Report Edits", key=f"save_report_{report.id}"):
-                        NewsReportService.update_report(
-                            report.id,
-                            title=editable_title,
-                            editorial=editable_editorial,
-                            content=editable_content,
-                            summary=editable_content,
+                dl1, dl2 = st.columns([6, 2])
+                
+                with dl1:
+                    st.caption(
+                        f"Coverage: {(report.news_from.strftime('%Y-%m-%d') if report.news_from else '?')} "
+                        f"to {(report.news_to.strftime('%Y-%m-%d') if report.news_to else '?')}"
+                        f" | Items: {report.news_count}"
+                    )
+                    st.write(foreword_preview or report.editorial)
+
+                if is_admin:
+                    a1, a2 = st.columns(2)
+                    with dl2:
+                        if st.button("Edit", type="tertiary", 
+                                     icon=":material/edit:",
+                                     key=f"edit_modal_report_{report.id}"):
+                            show_report_edit_modal(report.id)
+                with dl2:
+                    st.download_button(
+                        "Download Markdown",
+                        icon=":material/markdown:",
+                        type="tertiary",
+                        data=report_md.encode("utf-8"),
+                        file_name=f"ai_report_{report.id}.md",
+                        mime="text/markdown",
+                        key=f"download_md_{report.id}",
+                    )
+                    report_html = markdown_to_html(report_md, report.title or "AI Report")
+                    st.download_button(
+                        "Download HTML",
+                        icon=":material/web:",
+                        type="tertiary",
+                        data=report_html.encode("utf-8"),
+                        file_name=f"{report.title}.html",
+                        mime="text/html",
+                        key=f"download_html_{report.id}",
+                    )
+                    if is_admin and st.button(
+                        "Delete",
+                        icon=":material/delete:",
+                        type="tertiary",
+                        key=f"delete_report_{report.id}",
+                    ):
+                        if NewsReportService.delete_report(report.id):
+                            st.success("Report deleted.")
+                            st.rerun()
+                        else:
+                            st.error("Failed to delete report.")
+                if is_admin:
+                    with dl2:
+                        st.markdown('---')
+                        zh_default_title = (
+                            f"AI新闻周报（{(report.news_from.strftime('%Y-%m-%d') if report.news_from else report.report_date.strftime('%Y-%m-%d'))}"
+                            f" - {(report.news_to.strftime('%Y-%m-%d') if report.news_to else report.report_date.strftime('%Y-%m-%d'))}）"
                         )
-                        st.success("Report updated.")
-                        st.rerun()
-                
-                if report.items:
-                    st.write("**Included Items:**")
-                    for item in report.items:
-                        news = item.news_item
-                        stars = "⭐" * item.importance
-                        st.write(f"- {stars} {news.title}")
-                        if item.admin_comment:
-                            st.caption(f"  Comment: {item.admin_comment}")
+                        zh_title = st.text_input(
+                            "Chinese report title",
+                            value=zh_default_title,
+                            key=f"zh_title_{report.id}",
+                        )
+                        if st.button("Translate to Chinese by AI", icon=":material/translate:", type="secondary", key=f"translate_report_{report.id}"):
+                            if not translation_prompt_template:
+                                st.warning("Translation prompt template is empty. Please configure it in Config > LLM Configuration.")
+                            else:
+                                with st.spinner("Translating report..."):
+                                    report_for_translate = NewsReportService.get_report_by_id(report.id)
+                                    report_items_for_translate = (report_for_translate.items if report_for_translate else []) or []
+                                    start_str = report.news_from.strftime('%Y-%m-%d') if report.news_from else report.report_date.strftime('%Y-%m-%d')
+                                    end_str = report.news_to.strftime('%Y-%m-%d') if report.news_to else report.report_date.strftime('%Y-%m-%d')
+                                    translate_prompt = translation_prompt_template.format(
+                                        title=report.title or "",
+                                        start_date=start_str,
+                                        end_date=end_str,
+                                        content=report_md,
+                                    )
+                                    zh_content, _, _ = _chat_completion(
+                                        translation_model,
+                                        translate_prompt,
+                                        max_tokens=15000,
+                                        temperature=0.5
+                                    )
+                                    translated = NewsReportService.create_report(
+                                        report_date=report.report_date,
+                                        title=zh_title,
+                                        editorial=report.editorial,
+                                        content=zh_content,
+                                        summary=zh_content,
+                                        news_items=[ri.news_item_id for ri in report_items_for_translate],
+                                        news_from=report.news_from,
+                                        news_to=report.news_to,
+                                        item_meta={
+                                            ri.news_item_id: {
+                                                "category": ri.category,
+                                                "category_rank": ri.category_rank or 1
+                                            } for ri in report_items_for_translate
+                                        },
+                                    )
+                                    st.success(f"Chinese report generated!")
+                                    st.rerun()
     else:
         st.info("No reports generated yet.")
