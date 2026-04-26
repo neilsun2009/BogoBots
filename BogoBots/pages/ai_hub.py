@@ -30,11 +30,11 @@ from BogoBots.crawlers.news_crawler import get_crawler_for_source
 # Page config
 st.set_page_config(
     page_title='AI News Hub | BogoBots',
-    page_icon='🤖',
+    page_icon='📰',
     layout='wide'
 )
 
-st.title('🤖 AI News Hub')
+st.title('📰 AI News Hub')
 
 
 @st.dialog("News Item Detail", width="large")
@@ -45,9 +45,9 @@ def show_news_item_modal(item_id: int):
         return
 
     # Opening details marks item as read automatically
-    if not item.is_read:
-        NewsItemService.mark_item_read(item_id, is_read=True)
-        item = NewsItemService.get_item_by_id(item_id)
+    # if not item.is_read:
+    #     NewsItemService.mark_item_read(item_id, is_read=True)
+    #     item = NewsItemService.get_item_by_id(item_id)
 
     st.markdown(f"### {item.title}")
     st.write(f"**Source:** {item.source.name if item.source else 'Unknown'}")
@@ -200,7 +200,7 @@ def show_source_edit_modal(source_id: int):
                 st.error("Failed to delete source")
 
 
-REPORT_CATEGORY_ORDER = ["Top Story", "New Model", "Deep Focus", "Trending", "Fun Stuff"]
+REPORT_CATEGORY_ORDER = ["Top Story", "New Release", "Deep Focus", "Trending", "Fun Stuff"]
 
 
 def suggest_report_category(item) -> str:
@@ -209,9 +209,9 @@ def suggest_report_category(item) -> str:
     priority = (item.source.priority if item.source else "").lower()
 
     if priority == "high":
-        return "New Model"
+        return "New Release"
     if any(k in title for k in ["model", "checkpoint", "release", "weights", "llm"]):
-        return "New Model"
+        return "New Release"
     if any(k in title for k in ["paper", "research", "benchmark", "method", "survey"]):
         return "Deep Focus"
     return "Trending"
@@ -258,7 +258,7 @@ with st.sidebar:
 
 # Main tabs
 tab_news, tab_crawl, tab_report, tab_config = st.tabs(
-    ["🆕 Latest News", "🔄 Crawling Status", "📰 Reports & Review", "⚙️ Config (Admin)", ]
+    ["🆕 Latest News", "🔄 Crawling Status", "📬 Reports & Review", "⚙️ Config (Admin)", ]
 )
 
 # ============= LATEST NEWS TAB =============
@@ -374,6 +374,7 @@ with tab_news:
                 read_icon = "🆕" if not item.is_read else "✅"
                 star_icon = "⭐" if item.is_starred else ""
                 title_md = f"**{item.title}**" if not item.is_read else item.title
+                item_scope = "arch" if archived else "imp"
 
                 c1, c2, c3, c4 = st.columns([6, 1, 1, 1])
                 with c1:
@@ -395,7 +396,7 @@ with tab_news:
                     if st.button("Detail", 
                                  icon=":material/article:",
                                  type="tertiary",
-                                 key=f"news_tab_detail_{item.id}_{'arch' if archived else 'imp'}"):
+                                 key=f"news_tab_detail_{item.id}_{item_scope}"):
                         show_news_item_modal(item.id)
                 with c3:
                     if item.url:
@@ -403,32 +404,53 @@ with tab_news:
                                        icon=":material/open_in_new:",
                                        type="tertiary",
                                        url=item.url)
-                    read_label = "Mark as Unread" if item.is_read else "Mark as Read"
-                    if st.button(read_label, 
-                                 icon=":material/mark_email_unread:" if item.is_read else ":material/mark_email_read:",
-                                 type="tertiary",
-                                 key=f"toggle_read_{item.id}_{'arch' if archived else 'imp'}",
-                                 disabled=not is_admin):
-                        NewsItemService.mark_item_read(item.id, is_read=not item.is_read)
-                        st.success("Read status updated.")
-                        st.rerun()
+                    if is_admin:
+                        read_label = "Mark as Unread" if item.is_read else "Mark as Read"
+                        if st.button(read_label, 
+                                    icon=":material/mark_email_unread:" if item.is_read else ":material/mark_email_read:",
+                                    type="tertiary",
+                                    key=f"toggle_read_{item.id}_{item_scope}",
+                                    disabled=not is_admin):
+                            NewsItemService.mark_item_read(item.id, is_read=not item.is_read)
+                            st.success("Read status updated.")
+                            st.rerun()
                 with c4:
-                    star_label = "Unstar" if item.is_starred else "Star"
-                    if st.button(star_label, 
-                                 icon="⭐" if item.is_starred else ":material/star:",
-                                 type="tertiary",
-                                 key=f"news_star_{item.id}_{'arch' if archived else 'imp'}",
-                                 disabled=not is_admin):
-                        NewsItemService.set_item_starred(item.id, is_starred=not item.is_starred)
-                        st.rerun()
-                    arc_label = "Release" if item.is_archived else "Archive"
-                    if st.button(arc_label, 
-                                 icon=":material/archive:",
-                                 type="tertiary",
-                                 key=f"news_arc_{item.id}_{'arch' if archived else 'imp'}",
-                                 disabled=not is_admin):
-                        NewsItemService.set_item_archived(item.id, is_archived=not item.is_archived)
-                        st.rerun()
+                    if is_admin:
+                        star_label = "Unstar" if item.is_starred else "Star"
+                        if st.button(star_label, 
+                                    icon="⭐" if item.is_starred else ":material/star:",
+                                    type="tertiary",
+                                    key=f"news_star_{item.id}_{item_scope}",
+                                    disabled=not is_admin):
+                            NewsItemService.set_item_starred(item.id, is_starred=not item.is_starred)
+                            st.rerun()
+                        arc_label = "Release" if item.is_archived else "Archive"
+                        if st.button(arc_label, 
+                                    icon=":material/archive:",
+                                    type="tertiary",
+                                    key=f"news_arc_{item.id}_{item_scope}",
+                                    disabled=not is_admin):
+                            NewsItemService.set_item_archived(item.id, is_archived=not item.is_archived)
+                            st.rerun()
+                if is_admin:
+                    with st.expander("Edit Remark", expanded=False):
+                        remark_text = st.text_area(
+                            "Remark",
+                            value=item.remarks or "",
+                            key=f"news_tab_remark_{item.id}_{item_scope}",
+                            height=100,
+                            disabled=not is_admin,
+                        )
+                        if st.button(
+                            "Submit Remark",
+                            icon=":material/save:",
+                            type="tertiary",
+                            key=f"news_tab_remark_save_{item.id}_{item_scope}",
+                            disabled=not is_admin,
+                        ):
+                            NewsItemService.update_item(item.id, remarks=remark_text)
+                            st.success("Remark updated.")
+                            st.rerun()
             display_pagination(key_suffix='bottom')
 
     latest_subtab_important, latest_subtab_archived = st.tabs(["Important", "Archived"])
@@ -936,7 +958,7 @@ with tab_report:
 
         foreword_text = st.text_area("Foreword by Editor", height=120, key=foreword_key)
 
-        if selected_entries and st.button("📄 Generate Report", type="primary"):
+        if selected_entries and st.button("Generate Report", type="primary", icon=":material/article:"):
             with st.spinner("Generating report..."):
                 selected_entries_sorted = sorted(
                     selected_entries,

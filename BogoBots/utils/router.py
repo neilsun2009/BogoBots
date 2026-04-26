@@ -23,7 +23,7 @@ PAGES = [
     },
     {
         "label": "AI News Hub",
-        "icon": "🤖",
+        "icon": "📰",
         "link": "pages/ai_hub.py",
         "access": access_level['visitor'],
     },

@@ -9,14 +9,20 @@ available_models = [
         'open_router_prefix': 'openai',
         'models': [
             {
-                'display_name': 'GPT-5.4 Mini',
-                'api_name': 'gpt-5.4-mini',
+                'display_name': 'GPT-5.5 Pro',
+                'api_name': 'gpt-5.5-pro',
                 'is_free': False,
                 'native_tool_support': True,
             },
             {
-                'display_name': 'GPT-5.4',
-                'api_name': 'gpt-5.4',
+                'display_name': 'GPT-5.5',
+                'api_name': 'gpt-5.5',
+                'is_free': False,
+                'native_tool_support': True,
+            },
+            {
+                'display_name': 'GPT-5.4 Mini',
+                'api_name': 'gpt-5.4-mini',
                 'is_free': False,
                 'native_tool_support': True,
             },
@@ -65,8 +71,14 @@ available_models = [
         'open_router_prefix': 'deepseek',
         'models': [
             {
-                'display_name': 'DeepSeek V3.2',
-                'api_name': 'deepseek-v3.2',
+                'display_name': 'DeepSeek V4 Pro',
+                'api_name': 'deepseek-v4-pro',
+                'is_free': False,
+                'native_tool_support': False,
+            },
+            {
+                'display_name': 'DeepSeek V4 Flash',
+                'api_name': 'deepseek-v4-flash',
                 'is_free': False,
                 'native_tool_support': False,
             },
@@ -101,14 +113,14 @@ available_models = [
         'open_router_prefix': 'anthropic',
         'models': [
             {
-                'display_name': 'Claude Sonnet 4.6',
-                'api_name': 'claude-sonnet-4.6',
+                'display_name': 'Claude Opus 4.7',
+                'api_name': 'claude-opus-4.7',
                 'is_free': False,
                 'native_tool_support': True,
             },
             {
-                'display_name': 'Claude Opus 4.6',
-                'api_name': 'claude-opus-4.6',
+                'display_name': 'Claude Sonnet 4.6',
+                'api_name': 'claude-sonnet-4.6',
                 'is_free': False,
                 'native_tool_support': True,
             },
