@@ -441,16 +441,22 @@ with tab_news:
                             height=100,
                             disabled=not is_admin,
                         )
-                        if st.button(
-                            "Submit Remark",
-                            icon=":material/save:",
-                            type="tertiary",
-                            key=f"news_tab_remark_save_{item.id}_{item_scope}",
-                            disabled=not is_admin,
-                        ):
-                            NewsItemService.update_item(item.id, remarks=remark_text)
-                            st.success("Remark updated.")
-                            st.rerun()
+                        remark_saved_key = f"news_tab_remark_saved_{item.id}_{item_scope}"
+                        save_col, success_col = st.columns([1, 2])
+                        with save_col:
+                            if st.button(
+                                "Submit Remark",
+                                icon=":material/save:",
+                                type="tertiary",
+                                key=f"news_tab_remark_save_{item.id}_{item_scope}",
+                                disabled=not is_admin,
+                            ):
+                                NewsItemService.update_item(item.id, remarks=remark_text)
+                                st.session_state[remark_saved_key] = True
+                                st.rerun()
+                        with success_col:
+                            if st.session_state.pop(remark_saved_key, False):
+                                st.success("Remark updated.")
             display_pagination(key_suffix='bottom')
 
     latest_subtab_important, latest_subtab_archived = st.tabs(["Important", "Archived"])
@@ -521,7 +527,7 @@ with tab_config:
                 new_source_type = st.selectbox("Source Type", options=["RSS"], index=0, disabled=True, )
                 new_news_type = st.selectbox(
                     "News Type",
-                    options=["AI Company", "Media", "WeChat", "Podcast"],
+                    options=["AI Company", "Media", "Blog", "Podcast"],
                     index=0,
                     help="Semantic news category. Additional integration config can be saved in config_json."
                 )
@@ -1048,7 +1054,7 @@ with tab_report:
                             st.rerun()
                         else:
                             st.error("Failed to delete report.")
-                if is_admin:
+                if is_admin and getattr(report, "language", "original") != "cn":
                     with dl2:
                         st.markdown('---')
                         zh_default_title = (
@@ -1078,7 +1084,7 @@ with tab_report:
                                     zh_content, _, _ = _chat_completion(
                                         translation_model,
                                         translate_prompt,
-                                        max_tokens=15000,
+                                        # max_tokens=15000,
                                         temperature=0.5
                                     )
                                     translated = NewsReportService.create_report(
@@ -1096,6 +1102,7 @@ with tab_report:
                                                 "category_rank": ri.category_rank or 1
                                             } for ri in report_items_for_translate
                                         },
+                                        language="cn",
                                     )
                                     st.success(f"Chinese report generated!")
                                     st.rerun()

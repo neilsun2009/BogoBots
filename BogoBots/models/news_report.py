@@ -17,6 +17,7 @@ class NewsReport(BaseModel):
     content = Column(Text, comment='Editable final report content')
     summary = Column(Text, comment='Overall report summary')
     status = Column(String(20), default='draft', comment='Status: draft, published, archived')
+    language = Column(String(20), default='original', nullable=False, comment='Report language: original, cn')
     news_count = Column(Integer, default=0, comment='Number of items in report')
     
     # Relationships

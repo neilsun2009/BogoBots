@@ -1,5 +1,6 @@
 # BogoBots/crawlers/adapters/rss_adapter.py
 import feedparser
+import re
 import requests
 from datetime import datetime, timezone
 from typing import List, Optional
@@ -161,11 +162,45 @@ class RSSAdapter(BaseNewsCrawler):
             # explicit wait requested for rate limit
             time.sleep(3)
 
+    def _clean_jina_markdown(self, markdown: str) -> str:
+        """Remove markdown images and replace inline links with visible text."""
+        if not markdown:
+            return ''
+
+        cleaned = markdown
+
+        # Remove image reference definitions: [id]: https://...
+        cleaned = re.sub(r"^\s*\[[^\]]+\]:\s*\S+\s*$", "", cleaned, flags=re.MULTILINE)
+
+        # Remove inline images: ![alt](url "title")
+        cleaned = re.sub(r"!\[[^\]]*]\([^)]*\)", "", cleaned)
+
+        # Remove reference-style images: ![alt][ref]
+        cleaned = re.sub(r"!\[[^\]]*]\[[^\]]*]", "", cleaned)
+
+        # Remove collapsed reference-style images: ![][ref]
+        cleaned = re.sub(r"!\[\]\[[^\]]*]", "", cleaned)
+
+        # Replace inline links with label text: [label](url) -> label
+        cleaned = re.sub(r"\[([^\]]+)]\((?:[^)(]+|\([^)]*\))*\)", r"\1", cleaned)
+
+        # Replace reference-style links with label text: [label][ref] -> label
+        cleaned = re.sub(r"\[([^\]]+)]\[[^\]]*]", r"\1", cleaned)
+
+        # Remove remaining link reference definitions: [ref]: https://...
+        cleaned = re.sub(r"^\s*\[[^\]]+\]:\s*.+$", "", cleaned, flags=re.MULTILINE)
+
+        # Collapse extra blank lines created by removals.
+        cleaned = re.sub(r"\n{3,}", "\n\n", cleaned).strip()
+
+        return cleaned
+
     def get_full_content(self, url: str) -> str:
         """
         Adapter implementation of base get_full_content.
         """
-        return self._extract_content_via_jina(url)
+        markdown = self._extract_content_via_jina(url)
+        return self._clean_jina_markdown(markdown)
     
     def _html_to_markdown(self, html: str) -> str:
         """Convert HTML to simple markdown"""

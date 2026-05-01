@@ -50,7 +50,8 @@ class NewsReportService:
                       summary: str = None, news_items: List[int] = None,
                       llm_model: str = None,
                       news_from: datetime = None, news_to: datetime = None,
-                      item_meta: Optional[Dict[int, Dict[str, Any]]] = None) -> NewsReport:
+                      item_meta: Optional[Dict[int, Dict[str, Any]]] = None,
+                      language: str = "original") -> NewsReport:
         """Create a new report with optional items"""
         session = get_session()
         try:
@@ -64,6 +65,7 @@ class NewsReportService:
                 content=content,
                 summary=summary,
                 status='draft',
+                language=language or "original",
                 news_count=len(news_items) if news_items else 0
             )
             session.add(report)

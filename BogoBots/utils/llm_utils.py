@@ -74,7 +74,7 @@ def get_llm_client(model_name: str, api_key: Optional[str] = None):
     return OpenAI(api_key=api_key, base_url=base_url)
 
 
-def _chat_completion(model_name: str, prompt: str, max_tokens: int = 5000, temperature: float = 0.3):
+def _chat_completion(model_name: str, prompt: str, max_tokens: int = 50000, temperature: float = 0.3):
     print(f"Calling {model_name} with prompt: {prompt}")
     client = get_llm_client(model_name)
     response = client.chat.completions.create(
@@ -116,7 +116,7 @@ def summarize_news_item(item_id: int, title: str, content: str,
         session.close()
     
     # Prepare prompt
-    max_content_chars = 4000  # ~1000 tokens
+    max_content_chars = 10000 
     if len(content) > max_content_chars:
         content = content[:max_content_chars] + "..."
     

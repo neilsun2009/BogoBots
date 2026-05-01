@@ -87,7 +87,7 @@ while [ "$processed" -lt "$MAX_SOURCES_PER_RUN" ] && [ -s "$QUEUE_FILE" ]; do
   echo "[RUN] source_id=${source_id} window=${current_window}" | tee -a "$LOG_FILE"
   "$PYTHON_BIN" -u -P -m BogoBots.crawlers.scripts.run_news_crawl \
     --source-id "$source_id" \
-    --days 1 \
+    --days 2 \
     --summarize \
     2>&1 | tee -a "$LOG_FILE"
   rc=${PIPESTATUS[0]}
