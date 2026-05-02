@@ -106,13 +106,13 @@ class NewsSourceService:
     def test_source_connection(source_type: str, url: str, config: Dict = None) -> Dict[str, Any]:
         """Test if a source can be reached and parsed"""
         try:
-            if source_type != 'RSS':
+            if source_type not in ('RSS', 'Podcast'):
                 return {
                     'success': False,
-                    'message': "Only RSS source_type is supported currently."
+                    'message': "Only RSS and Podcast source types are supported currently."
                 }
 
-            if source_type == 'RSS':
+            if source_type in ('RSS', 'Podcast'):
                 import feedparser
                 feed = feedparser.parse(url)
                 

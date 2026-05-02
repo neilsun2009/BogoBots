@@ -23,6 +23,9 @@ class RawNewsItem:
     published_at: datetime
     content_raw: str
     image_urls: List[str]
+    episode_description: Optional[str] = None
+    episode_duration_seconds: Optional[int] = None
+    audio_url: Optional[str] = None
 
 
 class BaseNewsCrawler(ABC):
@@ -38,7 +41,10 @@ class BaseNewsCrawler(ABC):
         self.config = self._load_config()
         self.session = get_session()
         self.progress_callback = progress_callback
-        if self.source_type and self.news_source.source_type != self.source_type:
+        if (
+            self.source_type
+            and (self.news_source.source_type or "").upper() != self.source_type.upper()
+        ):
             raise ValueError(
                 f"Crawler source_type mismatch: adapter={self.source_type}, source={self.news_source.source_type}"
             )
@@ -135,6 +141,9 @@ class BaseNewsCrawler(ABC):
             published_at=raw_item.published_at,
             content_raw=raw_item.content_raw,
             image_urls=raw_item.image_urls if raw_item.image_urls else [],
+            episode_description=raw_item.episode_description,
+            episode_duration_seconds=raw_item.episode_duration_seconds,
+            audio_url=raw_item.audio_url,
             status='new',
             relevance_score=0.5,
             crawled_at=datetime.now(timezone.utc)
@@ -284,4 +293,7 @@ def get_crawler_for_source(news_source: NewsSource, progress_callback=None) -> O
     if source_type == "rss":
         from BogoBots.crawlers.adapters.rss_adapter import RSSAdapter
         return RSSAdapter(news_source, progress_callback=progress_callback)
+    if source_type == "podcast":
+        from BogoBots.crawlers.adapters.podcast_adapter import PodcastAdapter
+        return PodcastAdapter(news_source, progress_callback=progress_callback)
     return None

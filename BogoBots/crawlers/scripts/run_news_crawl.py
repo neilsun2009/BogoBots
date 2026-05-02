@@ -33,7 +33,7 @@ from typing import Dict, List
 from BogoBots.database.session import get_session
 from BogoBots.models.news_source import NewsSource
 from BogoBots.services.news_source_service import NewsSourceService
-from BogoBots.crawlers.adapters.rss_adapter import RSSAdapter
+from BogoBots.crawlers.news_crawler import get_crawler_for_source
 
 
 def run_crawl_for_source(source: NewsSource, since: datetime, 
@@ -65,14 +65,13 @@ def run_crawl_for_source(source: NewsSource, since: datetime,
     print(f"        Since: {since}")
     
     try:
-        # RSS-only fetching for now
-        if source.source_type != 'RSS':
-            print(f"[SKIP] source_type '{source.source_type}' is disabled. RSS only for now.")
-            return stats
         try:
-            crawler = RSSAdapter(source)
+            crawler = get_crawler_for_source(source)
+            if not crawler:
+                print(f"[SKIP] No crawler available for source_type '{source.source_type}'.")
+                return stats
         except Exception as e:
-            print(f"[ERROR] Failed to initialize RSS adapter: {e}")
+            print(f"[ERROR] Failed to initialize crawler adapter: {e}")
             stats['errors'] += 1
             return stats
         

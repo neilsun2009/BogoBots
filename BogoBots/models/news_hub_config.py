@@ -2,6 +2,31 @@
 from sqlalchemy import Column, String, Integer, Float, DateTime, Text
 from BogoBots.database.base import BaseModel
 
+
+PODCAST_TRANSCRIPTION_FIRST_PROMPT_DEFAULT = '''This is podcast audio segment {chunk_number} of {total_chunks}, covering approximately {start_time} to {end_time}.
+
+Episode description:
+{episode_description}
+
+Please listen to this first segment and produce a detailed timeline-based markdown transcript/summary in the original language. Do not translate to Chinese.
+
+Start with a `## Speaker Info` section. Identify the speaker(s), their roles, and useful voice/context clues. If names are unclear, use `Speaker 1`, `Speaker 2`, etc.
+
+After that, include the timeline content. Attribute each item to the speaker, for example `00:03:12 - Speaker 1: ...`.'''
+
+
+PODCAST_TRANSCRIPTION_FOLLOWUP_PROMPT_DEFAULT = '''This is podcast audio segment {chunk_number} of {total_chunks}, covering approximately {start_time} to {end_time}.
+
+Episode description:
+{episode_description}
+
+Use the speaker information from the first segment below to keep speaker labels consistent. If a new speaker appears, add a short note before the timeline item and assign the next speaker label.
+
+{speaker_context}
+
+Listen to this segment and produce a detailed timeline-based markdown transcript/summary in the original language. Do not translate to Chinese. Attribute each timeline item to the speaker, for example `00:33:12 - Speaker 1: ...`. Do not add a title or repeat the segment number.'''
+
+
 class NewsHubConfig(BaseModel):
     """AI Hub global configuration (singleton)"""
     __tablename__ = 'news_hub_config'
@@ -41,6 +66,17 @@ Markdown:
     foreword_max_tokens = Column(Integer, default=400, comment='Max tokens for foreword generation')
     translation_model = Column(String(100), default='openai/gpt-5.4-mini', comment='LLM model for report translation')
     translation_max_tokens = Column(Integer, default=5000, comment='Max tokens for translation generation')
+    podcast_transcription_model = Column(String(100), default='xiaomi/mimo-v2-omni', comment='LLM model for podcast transcription')
+    podcast_transcription_first_prompt_template = Column(
+        Text,
+        default=PODCAST_TRANSCRIPTION_FIRST_PROMPT_DEFAULT,
+        comment='Prompt template for first podcast audio chunk'
+    )
+    podcast_transcription_followup_prompt_template = Column(
+        Text,
+        default=PODCAST_TRANSCRIPTION_FOLLOWUP_PROMPT_DEFAULT,
+        comment='Prompt template for later podcast audio chunks with speaker context'
+    )
     max_summary_tokens = Column(Integer, default=200, comment='Max tokens per summary')
     relevance_threshold = Column(Float, default=0.3, comment='Minimum relevance score to include')
     

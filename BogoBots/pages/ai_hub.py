@@ -11,7 +11,13 @@ from BogoBots.configs.access import access_level
 from BogoBots.configs.models import available_models
 from BogoBots.utils.router import render_toc
 from BogoBots.utils.streamlit_utils import render_unlock_form
-from BogoBots.utils.llm_utils import get_model_price, summarize_news_item, extract_metadata, _chat_completion
+from BogoBots.utils.llm_utils import (
+    get_model_price,
+    summarize_news_item,
+    extract_metadata,
+    _chat_completion,
+    generate_podcast_transcript,
+)
 from BogoBots.utils.report_render_utils import (
     build_report_markdown,
     build_foreword_prompt,
@@ -23,7 +29,9 @@ from BogoBots.services.news_source_service import NewsSourceService
 from BogoBots.services.news_item_service import NewsItemService
 from BogoBots.services.news_report_service import NewsReportService
 
-from BogoBots.models.news_hub_config import NewsHubConfig
+from BogoBots.models.news_hub_config import (
+    NewsHubConfig,
+)
 from BogoBots.database.session import get_session
 from BogoBots.crawlers.news_crawler import get_crawler_for_source
 
@@ -35,6 +43,17 @@ st.set_page_config(
 )
 
 st.title('📰 AI News Hub')
+
+
+def format_episode_duration(seconds):
+    if seconds is None:
+        return ""
+    seconds = int(seconds)
+    hours, remainder = divmod(seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    if hours:
+        return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+    return f"{minutes:02d}:{seconds:02d}"
 
 
 @st.dialog("News Item Detail", width="large")
@@ -53,24 +72,60 @@ def show_news_item_modal(item_id: int):
     st.write(f"**Source:** {item.source.name if item.source else 'Unknown'}")
     st.write(f"**Published:** {item.published_at}")
     st.write(f"**Link:** {item.url}")
+    can_edit_admin_fields = st.session_state.get('access_level', 0) >= access_level['admin']
+
+    if item.audio_url:
+        st.audio(item.audio_url)
+    if item.episode_duration_seconds:
+        st.write(f"**Duration:** {format_episode_duration(item.episode_duration_seconds)}")
+    if item.episode_description:
+        with st.expander("Episode Description", expanded=False):
+            st.markdown(item.episode_description)
     
-    with st.expander("Raw markdown content"):
-        if st.button("Retry Markdown via jina", 
-                     icon=":material/restore_page:",
-                     key=f"retry_jina_{item_id}"):
-            source = item.source
-            if source:
-                crawler = get_crawler_for_source(source)
-                if crawler:
-                    new_markdown = crawler.get_full_content(item.url)
-                    NewsItemService.update_item(item_id, content_raw=new_markdown)
-                    st.success("Markdown refreshed from source implementation.")
+    with st.expander("Raw content"):
+        if item.audio_url: # podcast type
+            progress_expander = st.expander("AI Podcast Transcription Progress", expanded=False)
+            progress_placeholder = progress_expander.empty()
+            progress_messages = []
+
+            def podcast_progress(msg: str):
+                progress_messages.append(f"[{datetime.now(timezone.utc).strftime('%H:%M:%S')}] {msg}")
+                progress_placeholder.code("\n".join(progress_messages[-300:]))
+
+            if st.button(
+                "Generate AI Transcript",
+                icon=":material/graphic_eq:",
+                # type="tertiary",
+                key=f"generate_podcast_transcript_{item_id}",
+                disabled=not can_edit_admin_fields,
+            ):
+                try:
+                    with st.spinner("Generating podcast transcript..."):
+                        result = generate_podcast_transcript(item_id, progress_callback=podcast_progress)
+                        model_name = item.summary_model or "openai/gpt-5.4-mini"
+                        summarize_news_item(item_id, item.title, result.get("transcript", ""), model_name=model_name)
+                    st.success("Podcast transcript generated and summary refreshed.")
                     st.rerun()
-                else:
-                    st.warning("No crawler implementation available for this source.")
+                except Exception as e:
+                    st.error(f"Podcast transcript generation failed: {e}")
+            
+        else: # plain news type
+            if st.button("Retry Markdown via jina", 
+                        icon=":material/restore_page:",
+                        key=f"retry_jina_{item_id}",
+                        disabled=not can_edit_admin_fields):
+                source = item.source
+                if source:
+                    crawler = get_crawler_for_source(source)
+                    if crawler:
+                        new_markdown = crawler.get_full_content(item.url)
+                        NewsItemService.update_item(item_id, content_raw=new_markdown)
+                        st.success("Markdown refreshed from source implementation.")
+                        st.rerun()
+                    else:
+                        st.warning("No crawler implementation available for this source.")
         st.text(item.content_raw or "")
 
-    can_edit_admin_fields = st.session_state.get('access_level', 0) >= access_level['admin']
     summary_text = st.text_area(
         "Summary",
         value=item.content_summary or "",
@@ -95,9 +150,15 @@ def show_news_item_modal(item_id: int):
         if st.button("Regenerate Summary", 
                     icon=":material/article_shortcut:",
                     type="tertiary",
-                    key=f"regen_summary_{item_id}"):
+                    key=f"regen_summary_{item_id}",
+                    disabled=not can_edit_admin_fields):
             model_name = item.summary_model or "openai/gpt-5.4-mini"
-            summarize_news_item(item_id, item.title, item.content_raw or "", model_name=model_name)
+            summarize_news_item(
+                item_id,
+                item.title,
+                item.content_raw or item.episode_description or "",
+                model_name=model_name,
+            )
             # extract_metadata(item_id, item.title, item.content_raw or "", model_name=model_name)
             st.success("Summary regenerated.")
             st.rerun()
@@ -387,10 +448,14 @@ with tab_news:
                             st.caption("📰")
                     with s_text_col:
                         st.caption(f"{(item.content_summary or '').strip()[:400]}...")
+                        if item.audio_url:
+                            st.audio(item.audio_url)
+                        # duration_text = format_episode_duration(item.episode_duration_seconds)
                         st.caption(
                             f"{item.source.name if item.source else 'Unknown'} | "
                             f"{item.source.news_type if item.source else 'N/A'} | "
                             f"{item.published_at.strftime('%Y-%m-%d %H:%M')}"
+                            # f"{' | ' + duration_text if duration_text else ''}"
                         )
                 with c2:
                     if st.button("Detail", 
@@ -524,7 +589,7 @@ with tab_config:
 
             with st.expander("➕ Add New Source", expanded=True):
                 new_name = st.text_input("Source Name", placeholder="e.g., OpenAI Blog")
-                new_source_type = st.selectbox("Source Type", options=["RSS"], index=0, disabled=True, )
+                new_source_type = st.selectbox("Source Type", options=["RSS", "Podcast"], index=0)
                 new_news_type = st.selectbox(
                     "News Type",
                     options=["AI Company", "Media", "Blog", "Podcast"],
@@ -601,6 +666,12 @@ with tab_config:
                     for model in group['models']:
                         model_options.append(f"{group['open_router_prefix']}/{model['api_name']}")
                 
+                audio_model_options = []
+                for group in available_models:
+                    for model in group['models']:
+                        if model.get('supports_audio_input', False):
+                            audio_model_options.append(f"{group['open_router_prefix']}/{model['api_name']}")
+
                 # Row 1: Summary
                 st.markdown("### Summary")
                 s_left, s_right = st.columns([1, 1])
@@ -689,6 +760,38 @@ with tab_config:
                         height=190,
                         help="Use {title}, {start_date}, {end_date}, {content}."
                     )
+
+                # Row 4: Podcast transcription
+                st.markdown("### Podcast Transcription")
+                p_left, p_right = st.columns([1, 1])
+                with p_left:
+                    podcast_transcription_model = st.selectbox(
+                        "Podcast transcription model",
+                        options=audio_model_options,
+                        index=audio_model_options.index(getattr(config, "podcast_transcription_model", "xiaomi/mimo-v2.5"))
+                        if getattr(config, "podcast_transcription_model", "xiaomi/mimo-v2.5") in audio_model_options else 0,
+                    )
+                    podcast_price = get_model_price(podcast_transcription_model, 'OpenRouter')
+                    if podcast_price:
+                        st.caption("Podcast transcription model price")
+                        st.json(podcast_price)
+                with p_right:
+                    podcast_first_prompt = st.text_area(
+                        "Podcast first chunk prompt",
+                        value=(
+                            getattr(config, "podcast_transcription_first_prompt_template", None)
+                        ),
+                        height=220,
+                        help="Use {chunk_number}, {total_chunks}, {start_time}, {end_time}, {episode_description}."
+                    )
+                    podcast_followup_prompt = st.text_area(
+                        "Podcast follow-up chunk prompt",
+                        value=(
+                            getattr(config, "podcast_transcription_followup_prompt_template", None)
+                        ),
+                        height=280,
+                        help="Use {chunk_number}, {total_chunks}, {start_time}, {end_time}, {episode_description}, {speaker_context}."
+                    )
                 
                 if st.button("Save LLM Configuration", type="primary"):
                     config.default_summary_model = summary_model
@@ -699,6 +802,9 @@ with tab_config:
                     config.foreword_model = foreword_model
                     # config.foreword_max_tokens = foreword_max_tokens
                     config.translation_model = translation_model
+                    config.podcast_transcription_model = podcast_transcription_model
+                    config.podcast_transcription_first_prompt_template = podcast_first_prompt
+                    config.podcast_transcription_followup_prompt_template = podcast_followup_prompt
                     # config.translation_max_tokens = translation_max_tokens
                     # config.max_summary_tokens = max_tokens
                     # config.relevance_threshold = relevance_threshold

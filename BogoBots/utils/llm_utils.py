@@ -45,7 +45,7 @@ def get_model_price(model_name, provider):
 # =================== AI Hub LLM Utilities ===================
 
 import json
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Callable
 from datetime import datetime, timedelta, timezone
 
 def get_llm_client(model_name: str, api_key: Optional[str] = None):
@@ -98,6 +98,18 @@ def _chat_completion(model_name: str, prompt: str, max_tokens: int = 50000, temp
     return content.strip(), input_tokens, output_tokens
 
 
+def _summarization_content_for_item(item, fallback_content: str) -> str:
+    content = fallback_content or ""
+    if content.strip():
+        return content
+
+    episode_description = getattr(item, "episode_description", None) or ""
+    if episode_description.strip():
+        return episode_description
+
+    return content
+
+
 def summarize_news_item(item_id: int, title: str, content: str, 
                         model_name: str = 'deepseek-chat') -> Dict[str, Any]:
     """
@@ -112,6 +124,8 @@ def summarize_news_item(item_id: int, title: str, content: str,
     try:
         config = NewsHubConfig.get_or_create(session)
         prompt_template = config.summary_prompt_template
+        item = session.query(NewsItem).filter_by(id=item_id).first()
+        content = _summarization_content_for_item(item, content) if item else content
     finally:
         session.close()
     
@@ -149,6 +163,29 @@ def summarize_news_item(item_id: int, title: str, content: str,
         'input_tokens': input_tokens,
         'output_tokens': output_tokens
     }
+
+
+def generate_podcast_transcript(
+    item_id: int,
+    model_name: Optional[str] = None,
+    progress_callback: Optional[Callable[[str], None]] = None,
+) -> Dict[str, Any]:
+    """
+    Generate a podcast transcript/summary from the episode audio and save it to content_raw.
+    Public wrapper kept here for UI callers; podcast-specific implementation lives in podcast_utils.
+    """
+    import streamlit as st
+    from BogoBots.utils.podcast_utils import generate_podcast_transcript_for_item
+
+    api_key = st.secrets.get('open_router_key', '')
+    if not api_key:
+        raise RuntimeError("Missing OpenRouter API key in st.secrets['open_router_key']")
+    return generate_podcast_transcript_for_item(
+        item_id=item_id,
+        api_key=api_key,
+        model_name=model_name,
+        progress_callback=progress_callback,
+    )
 
 
 def extract_metadata(item_id: int, title: str, content: str,

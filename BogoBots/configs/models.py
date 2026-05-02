@@ -32,6 +32,13 @@ available_models = [
                 'is_free': False,
                 'native_tool_support': True,
             },
+            {
+                'display_name': 'GPT-4o Mini Transcribe',
+                'api_name': 'gpt-4o-mini-transcribe',
+                'is_free': False,
+                'native_tool_support': True,
+                'supports_audio_input': True,
+            },
         ]
     },
     {
@@ -138,6 +145,7 @@ available_models = [
                 'api_name': 'gemini-3.1-flash-lite-preview',
                 'is_free': False,
                 'native_tool_support': True,
+                'supports_audio_input': True,
             },
             {
                 'display_name': 'Gemini 3.1 Pro Preview',
@@ -171,6 +179,22 @@ available_models = [
                 'api_name': 'grok-4.1-fast',
                 'is_free': False,
                 'native_tool_support': False,
+            },
+        ]
+    },
+    {
+        'group': 'Xiaomi',
+        'icon': 'https://i02.appmifile.com/i18n/scm/favicon.png',
+        'supports_official_api': False,
+        'supports_open_router': True,
+        'open_router_prefix': 'xiaomi',
+        'models': [
+            {
+                'display_name': 'Mimo v2.5',
+                'api_name': 'mimo-v2.5',
+                'is_free': False,
+                'native_tool_support': True,
+                'supports_audio_input': True,
             },
         ]
     },
