@@ -1,4 +1,7 @@
 #!/bin/bash
+
+export PATH="/home/$(whoami)/miniconda3/envs/bogo/bin:$PATH"
+
 if ! pgrep -f BogoBots.py > /dev/null
 then
 	cd "$(dirname "$0")"

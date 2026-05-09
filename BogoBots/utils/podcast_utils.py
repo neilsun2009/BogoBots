@@ -14,6 +14,7 @@ import requests
 
 
 PODCAST_CHUNK_SECONDS = 20 * 60
+AUDIO_CHUNK_MAX_ATTEMPTS = 3
 
 
 def _podcast_progress(progress_callback: Optional[Callable[[str], None]], message: str):
@@ -250,7 +251,11 @@ def _transcribe_audio_chunk(
         timeout=600,
     )
     response.raise_for_status()
-    response_json = response.json()
+    try:
+        response_json = response.json()
+    except ValueError:
+        response_text = response.text.replace("\n", "").strip()
+        response_json = json.loads(response_text)
     _podcast_progress(
         progress_callback,
         f"Finished chunk {chunk_number}/{total_chunks} in {time.perf_counter() - start_time:.2f}s",
@@ -258,43 +263,57 @@ def _transcribe_audio_chunk(
     return response_json
 
 
-def generate_podcast_transcript_for_item(
-    item_id: int,
+def _transcribe_audio_chunk_with_retries(
+    chunk: Dict[str, Any],
+    chunk_number: int,
+    total_chunks: int,
+    model_name: str,
+    prompt: str,
     api_key: str,
-    model_name: Optional[str] = None,
-    progress_callback: Optional[Callable[[str], None]] = None,
+    progress_callback=None,
 ) -> Dict[str, Any]:
-    """
-    Generate a podcast transcript/summary from episode audio and save it to content_raw.
-    Uses NewsHubConfig for model and prompt templates.
-    """
-    from BogoBots.database.session import get_session
-    from BogoBots.models.news_hub_config import (
-        NewsHubConfig,
-    )
-    from BogoBots.models.news_item import NewsItem
+    """Call OpenRouter for one audio chunk; retry on HTTP/JSON failures."""
+    last_exc: Optional[BaseException] = None
+    for attempt in range(1, AUDIO_CHUNK_MAX_ATTEMPTS + 1):
+        try:
+            return _transcribe_audio_chunk(
+                chunk=chunk,
+                chunk_number=chunk_number,
+                total_chunks=total_chunks,
+                model_name=model_name,
+                prompt=prompt,
+                api_key=api_key,
+                progress_callback=progress_callback,
+            )
+        except (requests.RequestException, json.JSONDecodeError, ValueError) as exc:
+            last_exc = exc
+            if attempt >= AUDIO_CHUNK_MAX_ATTEMPTS:
+                break
+            wait_s = min(2.0 * attempt, 10.0)
+            _podcast_progress(
+                progress_callback,
+                f"Chunk {chunk_number}/{total_chunks} attempt {attempt}/{AUDIO_CHUNK_MAX_ATTEMPTS} "
+                f"failed ({type(exc).__name__}: {exc}); retrying in {wait_s:.1f}s...",
+            )
+            time.sleep(wait_s)
+    raise RuntimeError(
+        f"OpenRouter failed for chunk {chunk_number}/{total_chunks} "
+        f"after {AUDIO_CHUNK_MAX_ATTEMPTS} attempts"
+    ) from last_exc
 
-    session = get_session()
-    try:
-        item = session.query(NewsItem).filter_by(id=item_id).first()
-        config = NewsHubConfig.get_or_create(session)
-        if not item:
-            raise ValueError(f"News item #{item_id} not found")
-        if not item.audio_url:
-            raise ValueError("This podcast item does not have an audio URL")
 
-        selected_model = model_name or config.podcast_transcription_model or "xiaomi/mimo-v2-omni"
-        first_prompt_template = (
-            config.podcast_transcription_first_prompt_template
-        )
-        followup_prompt_template = (
-            config.podcast_transcription_followup_prompt_template
-        )
-        episode_description = item.episode_description or ""
-        audio_url = item.audio_url
-    finally:
-        session.close()
-
+def _run_chunked_audio_llm(
+    *,
+    item_id: int,
+    audio_url: str,
+    episode_description: str,
+    api_key: str,
+    model_name: str,
+    first_prompt_template: str,
+    followup_prompt_template: str,
+    progress_callback: Optional[Callable[[str], None]] = None,
+) -> tuple[str, List[Dict[str, Any]]]:
+    """Download audio, chunk, call OpenRouter per chunk, return combined markdown and chunk metadata."""
     if not api_key:
         raise RuntimeError("Missing OpenRouter API key")
 
@@ -321,11 +340,11 @@ def generate_podcast_transcript_for_item(
                 episode_description=episode_description,
                 speaker_context=speaker_context,
             )
-            response_json = _transcribe_audio_chunk(
+            response_json = _transcribe_audio_chunk_with_retries(
                 chunk=chunk,
                 chunk_number=chunk_number,
                 total_chunks=total_chunks,
-                model_name=selected_model,
+                model_name=model_name,
                 prompt=prompt,
                 api_key=api_key,
                 progress_callback=progress_callback,
@@ -346,7 +365,51 @@ def generate_podcast_transcript_for_item(
                 if speaker_context:
                     _podcast_progress(progress_callback, "Extracted speaker context from first chunk")
 
-    transcript = "\n\n".join(part for part in transcript_parts if part)
+    combined = "\n\n".join(part for part in transcript_parts if part)
+    return combined, chunk_results
+
+
+def generate_podcast_transcript_for_item(
+    item_id: int,
+    api_key: str,
+    model_name: Optional[str] = None,
+    progress_callback: Optional[Callable[[str], None]] = None,
+) -> Dict[str, Any]:
+    """
+    Transcribe episode audio into timestamped transcript; saves content_raw only.
+    """
+    from BogoBots.database.session import get_session
+    from BogoBots.models.news_hub_config import NewsHubConfig
+    from BogoBots.models.news_item import NewsItem
+
+    session = get_session()
+    try:
+        item = session.query(NewsItem).filter_by(id=item_id).first()
+        config = NewsHubConfig.get_or_create(session)
+        if not item:
+            raise ValueError(f"News item #{item_id} not found")
+        if not item.audio_url:
+            raise ValueError("This podcast item does not have an audio URL")
+
+        selected_model = model_name or config.podcast_transcript_from_audio_model or "xiaomi/mimo-v2-omni"
+        first_prompt_template = config.podcast_transcript_from_audio_first_prompt_template
+        followup_prompt_template = config.podcast_transcript_from_audio_followup_prompt_template
+        episode_description = item.episode_description or ""
+        audio_url = item.audio_url
+    finally:
+        session.close()
+
+    transcript, chunk_results = _run_chunked_audio_llm(
+        item_id=item_id,
+        audio_url=audio_url,
+        episode_description=episode_description,
+        api_key=api_key,
+        model_name=selected_model,
+        first_prompt_template=first_prompt_template,
+        followup_prompt_template=followup_prompt_template,
+        progress_callback=progress_callback,
+    )
+
     session = get_session()
     try:
         item = session.query(NewsItem).filter_by(id=item_id).first()
@@ -358,9 +421,179 @@ def generate_podcast_transcript_for_item(
     finally:
         session.close()
 
-    _podcast_progress(progress_callback, "Saved AI-generated podcast transcript")
+    _podcast_progress(progress_callback, "Saved transcript to content_raw")
     return {
         "transcript": transcript,
         "model": selected_model,
         "chunks": chunk_results,
     }
+
+
+def generate_podcast_timeline_from_audio_for_item(
+    item_id: int,
+    api_key: str,
+    model_name: Optional[str] = None,
+    progress_callback: Optional[Callable[[str], None]] = None,
+) -> Dict[str, Any]:
+    """
+    Build an episode timeline from audio chunks; saves podcast_timeline_summary only.
+    """
+    from BogoBots.database.session import get_session
+    from BogoBots.models.news_hub_config import NewsHubConfig
+    from BogoBots.models.news_item import NewsItem
+
+    session = get_session()
+    try:
+        item = session.query(NewsItem).filter_by(id=item_id).first()
+        config = NewsHubConfig.get_or_create(session)
+        if not item:
+            raise ValueError(f"News item #{item_id} not found")
+        if not item.audio_url:
+            raise ValueError("This podcast item does not have an audio URL")
+
+        selected_model = model_name or config.podcast_timeline_from_audio_model or "xiaomi/mimo-v2-omni"
+        first_prompt_template = config.podcast_timeline_from_audio_first_prompt_template
+        followup_prompt_template = config.podcast_timeline_from_audio_followup_prompt_template
+        episode_description = item.episode_description or ""
+        audio_url = item.audio_url
+    finally:
+        session.close()
+
+    timeline_text, chunk_results = _run_chunked_audio_llm(
+        item_id=item_id,
+        audio_url=audio_url,
+        episode_description=episode_description,
+        api_key=api_key,
+        model_name=selected_model,
+        first_prompt_template=first_prompt_template,
+        followup_prompt_template=followup_prompt_template,
+        progress_callback=progress_callback,
+    )
+
+    session = get_session()
+    try:
+        item = session.query(NewsItem).filter_by(id=item_id).first()
+        if item:
+            item.podcast_timeline_summary = timeline_text
+            item.summary_model = selected_model
+            item.updated_at = datetime.now(timezone.utc)
+            session.commit()
+    finally:
+        session.close()
+
+    _podcast_progress(progress_callback, "Saved timeline to podcast_timeline_summary")
+    return {
+        "timeline": timeline_text,
+        "model": selected_model,
+        "chunks": chunk_results,
+    }
+
+
+def generate_podcast_timeline_from_text_for_item(
+    item_id: int,
+    model_name: Optional[str] = None,
+    progress_callback: Optional[Callable[[str], None]] = None,
+) -> Dict[str, Any]:
+    """
+    Build podcast_timeline_summary from content_raw via text model (OpenRouter via llm_utils).
+    """
+    from BogoBots.database.session import get_session
+    from BogoBots.models.news_hub_config import NewsHubConfig
+    from BogoBots.models.news_item import NewsItem
+    from BogoBots.utils.llm_utils import _chat_completion
+
+    session = get_session()
+    try:
+        item = session.query(NewsItem).filter_by(id=item_id).first()
+        config = NewsHubConfig.get_or_create(session)
+        if not item:
+            raise ValueError(f"News item #{item_id} not found")
+        transcript = (item.content_raw or "").strip()
+        if not transcript:
+            raise ValueError("No transcript in content_raw; add RSS transcript or run transcript-from-audio first.")
+
+        template = config.podcast_timeline_from_text_prompt_template
+        selected_model = model_name or config.podcast_timeline_from_text_model or "openai/gpt-5.4-mini"
+        title = item.title or ""
+        episode_description = item.episode_description or ""
+    finally:
+        session.close()
+
+    # max_transcript_chars = 120_000
+    # if len(transcript) > max_transcript_chars:
+    #     transcript = transcript[:max_transcript_chars]
+    #     _podcast_progress(progress_callback, f"Transcript truncated to {max_transcript_chars} chars for LLM context")
+
+    prompt = template.format(
+        title=title,
+        episode_description=episode_description,
+        transcript=transcript,
+    )
+    _podcast_progress(progress_callback, f"Generating timeline from transcript with {selected_model}")
+    timeline_text, input_tokens, output_tokens = _chat_completion(
+        model_name=selected_model,
+        prompt=prompt,
+        # max_tokens=8000,
+        temperature=0.3,
+    )
+
+    session = get_session()
+    try:
+        item = session.query(NewsItem).filter_by(id=item_id).first()
+        if item:
+            item.podcast_timeline_summary = timeline_text
+            item.summary_model = selected_model
+            item.summary_tokens_input = input_tokens
+            item.summary_tokens_output = output_tokens
+            item.updated_at = datetime.now(timezone.utc)
+            session.commit()
+    finally:
+        session.close()
+
+    _podcast_progress(progress_callback, "Saved timeline to podcast_timeline_summary")
+    return {
+        "timeline": timeline_text,
+        "model": selected_model,
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+    }
+
+
+def generate_podcast_timeline_summary_for_item(
+    item_id: int,
+    api_key: str,
+    model_name: Optional[str] = None,
+    progress_callback: Optional[Callable[[str], None]] = None,
+) -> Dict[str, Any]:
+    """
+    Prefer non-empty content_raw → timeline-from-text; else audio_url → timeline-from-audio.
+    """
+    from BogoBots.database.session import get_session
+    from BogoBots.models.news_item import NewsItem
+
+    session = get_session()
+    try:
+        item = session.query(NewsItem).filter_by(id=item_id).first()
+        if not item:
+            raise ValueError(f"News item #{item_id} not found")
+        transcript = (item.content_raw or "").strip()
+        audio_url = (item.audio_url or "").strip()
+    finally:
+        session.close()
+
+    if transcript:
+        return generate_podcast_timeline_from_text_for_item(
+            item_id=item_id,
+            model_name=model_name,
+            progress_callback=progress_callback,
+        )
+    if audio_url:
+        return generate_podcast_timeline_from_audio_for_item(
+            item_id=item_id,
+            api_key=api_key,
+            model_name=model_name,
+            progress_callback=progress_callback,
+        )
+    raise ValueError(
+        "Cannot generate timeline: need a non-empty transcript (content_raw) or an audio URL."
+    )

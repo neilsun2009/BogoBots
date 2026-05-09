@@ -48,6 +48,8 @@ import json
 from typing import Optional, Dict, Any, Callable
 from datetime import datetime, timedelta, timezone
 
+from sqlalchemy.orm import joinedload
+
 def get_llm_client(model_name: str, api_key: Optional[str] = None):
     """
     Get an OpenAI-compatible client (official OpenAI package).
@@ -98,9 +100,30 @@ def _chat_completion(model_name: str, prompt: str, max_tokens: int = 50000, temp
     return content.strip(), input_tokens, output_tokens
 
 
+def _is_podcast_like_item(item) -> bool:
+    if not item:
+        return False
+    if getattr(item, "audio_url", None) and str(item.audio_url).strip():
+        return True
+    src = getattr(item, "source", None)
+    if src is not None and getattr(src, "news_type", None) == "Podcast":
+        return True
+    return False
+
+
 def _summarization_content_for_item(item, fallback_content: str) -> str:
-    content = fallback_content or ""
-    if content.strip():
+    if not item:
+        return (fallback_content or "").strip()
+
+    if _is_podcast_like_item(item):
+        for field in ("podcast_timeline_summary", "content_raw", "episode_description"):
+            val = getattr(item, field, None) or ""
+            if str(val).strip():
+                return str(val).strip()
+        return (fallback_content or "").strip()
+
+    content = (fallback_content or "").strip()
+    if content:
         return content
 
     episode_description = getattr(item, "episode_description", None) or ""
@@ -124,7 +147,12 @@ def summarize_news_item(item_id: int, title: str, content: str,
     try:
         config = NewsHubConfig.get_or_create(session)
         prompt_template = config.summary_prompt_template
-        item = session.query(NewsItem).filter_by(id=item_id).first()
+        item = (
+            session.query(NewsItem)
+            .options(joinedload(NewsItem.source))
+            .filter_by(id=item_id)
+            .first()
+        )
         content = _summarization_content_for_item(item, content) if item else content
     finally:
         session.close()
@@ -181,6 +209,28 @@ def generate_podcast_transcript(
     if not api_key:
         raise RuntimeError("Missing OpenRouter API key in st.secrets['open_router_key']")
     return generate_podcast_transcript_for_item(
+        item_id=item_id,
+        api_key=api_key,
+        model_name=model_name,
+        progress_callback=progress_callback,
+    )
+
+
+def generate_podcast_timeline_summary(
+    item_id: int,
+    model_name: Optional[str] = None,
+    progress_callback: Optional[Callable[[str], None]] = None,
+) -> Dict[str, Any]:
+    """
+    Generate podcast_timeline_summary from transcript text if content_raw is set, else from audio.
+    """
+    import streamlit as st
+    from BogoBots.utils.podcast_utils import generate_podcast_timeline_summary_for_item
+
+    api_key = st.secrets.get("open_router_key", "")
+    if not api_key:
+        raise RuntimeError("Missing OpenRouter API key in st.secrets['open_router_key']")
+    return generate_podcast_timeline_summary_for_item(
         item_id=item_id,
         api_key=api_key,
         model_name=model_name,

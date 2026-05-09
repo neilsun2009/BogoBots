@@ -15,16 +15,22 @@ PAGES = [
         "link": "pages/retriever_42.py",
         "access": access_level['visitor'],
     },
-    {
-        "label": "Book Manager",
-        "icon": "📚",
-        "link": "pages/book_manager.py",
-        "access": access_level['admin'],
-    },
+    # {
+    #     "label": "Book Manager",
+    #     "icon": "📚",
+    #     "link": "pages/book_manager.py",
+    #     "access": access_level['admin'],
+    # },
     {
         "label": "AI News Hub",
         "icon": "📰",
         "link": "pages/ai_hub.py",
+        "access": access_level['visitor'],
+    },
+    {
+        "label": "Timeline Summary",
+        "icon": "📝",
+        "link": "pages/timeline_summary.py",
         "access": access_level['visitor'],
     },
     {

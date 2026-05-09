@@ -6,6 +6,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../.
 import streamlit as st
 from datetime import datetime, timedelta, timezone
 import json
+import re
 
 from BogoBots.configs.access import access_level
 from BogoBots.configs.models import available_models
@@ -17,6 +18,7 @@ from BogoBots.utils.llm_utils import (
     extract_metadata,
     _chat_completion,
     generate_podcast_transcript,
+    generate_podcast_timeline_summary,
 )
 from BogoBots.utils.report_render_utils import (
     build_report_markdown,
@@ -43,6 +45,15 @@ st.set_page_config(
 )
 
 st.title('📰 AI News Hub')
+
+
+def _item_is_podcast_like(item) -> bool:
+    if getattr(item, "audio_url", None) and str(item.audio_url).strip():
+        return True
+    src = getattr(item, "source", None)
+    if src is not None and getattr(src, "news_type", None) == "Podcast":
+        return True
+    return False
 
 
 def format_episode_duration(seconds):
@@ -73,6 +84,7 @@ def show_news_item_modal(item_id: int):
     st.write(f"**Published:** {item.published_at}")
     st.write(f"**Link:** {item.url}")
     can_edit_admin_fields = st.session_state.get('access_level', 0) >= access_level['admin']
+    is_podcast_item = _item_is_podcast_like(item)
 
     if item.audio_url:
         st.audio(item.audio_url)
@@ -81,10 +93,10 @@ def show_news_item_modal(item_id: int):
     if item.episode_description:
         with st.expander("Episode Description", expanded=False):
             st.markdown(item.episode_description)
-    
+
     with st.expander("Raw content"):
-        if item.audio_url: # podcast type
-            progress_expander = st.expander("AI Podcast Transcription Progress", expanded=False)
+        if item.audio_url and is_podcast_item:
+            progress_expander = st.expander("Transcript from audio progress", expanded=False)
             progress_placeholder = progress_expander.empty()
             progress_messages = []
 
@@ -93,24 +105,28 @@ def show_news_item_modal(item_id: int):
                 progress_placeholder.code("\n".join(progress_messages[-300:]))
 
             if st.button(
-                "Generate AI Transcript",
+                "Generate transcript from audio",
                 icon=":material/graphic_eq:",
-                # type="tertiary",
                 key=f"generate_podcast_transcript_{item_id}",
                 disabled=not can_edit_admin_fields,
             ):
                 try:
-                    with st.spinner("Generating podcast transcript..."):
+                    with st.spinner("Generating transcript from audio..."):
                         result = generate_podcast_transcript(item_id, progress_callback=podcast_progress)
-                        model_name = item.summary_model or "openai/gpt-5.4-mini"
-                        summarize_news_item(item_id, item.title, result.get("transcript", ""), model_name=model_name)
-                    st.success("Podcast transcript generated and summary refreshed.")
+                        # model_name = item.summary_model or "openai/gpt-5.4-mini"
+                        # summarize_news_item(
+                        #     item_id,
+                        #     item.title,
+                        #     result.get("transcript", ""),
+                        #     model_name=model_name,
+                        # )
+                    st.success("Transcript saved to raw content; summary refreshed.")
                     st.rerun()
                 except Exception as e:
-                    st.error(f"Podcast transcript generation failed: {e}")
-            
-        else: # plain news type
-            if st.button("Retry Markdown via jina", 
+                    st.error(f"Transcript generation failed: {e}")
+
+        elif not is_podcast_item:
+            if st.button("Retry Markdown via Jina",
                         icon=":material/restore_page:",
                         key=f"retry_jina_{item_id}",
                         disabled=not can_edit_admin_fields):
@@ -126,13 +142,77 @@ def show_news_item_modal(item_id: int):
                         st.warning("No crawler implementation available for this source.")
         st.text(item.content_raw or "")
 
+    if is_podcast_item:
+        with st.expander("Timeline summary", expanded=False):
+            if item.podcast_timeline_summary:
+                st.markdown(item.podcast_timeline_summary)
+                tl_md = item.podcast_timeline_summary
+                safe = re.sub(r"[^a-zA-Z0-9._-]+", "_", (item.title or "timeline").strip()).strip("._")[:80] or "timeline"
+                file_base = f"{safe}_{item_id}"
+                title_for_html = (item.title or "Timeline summary")[:120] or "Timeline summary"
+                html_doc = markdown_to_html(tl_md, title_for_html)
+                dl1, dl2 = st.columns(2)
+                with dl1:
+                    st.download_button(
+                        "Download Markdown",
+                        tl_md.encode("utf-8"),
+                        icon=":material/markdown:",
+                        file_name=f"{file_base}_timeline.md",
+                        mime="text/markdown",
+                        key=f"podcast_timeline_dl_md_{item_id}",
+                    )
+                with dl2:
+                    st.download_button(
+                        "Download HTML",
+                        html_doc.encode("utf-8"),
+                        icon=":material/html:",
+                        file_name=f"{file_base}_timeline.html",
+                        mime="text/html",
+                        key=f"podcast_timeline_dl_html_{item_id}",
+                    )
+            else:
+                st.caption("No timeline yet. Prefers transcript in Raw content when set; otherwise uses episode audio.")
+            timeline_progress_expander = st.expander("Timeline generation progress", expanded=False)
+            timeline_prog_ph = timeline_progress_expander.empty()
+            timeline_prog_msgs = []
+
+            def timeline_progress(msg: str):
+                timeline_prog_msgs.append(f"[{datetime.now(timezone.utc).strftime('%H:%M:%S')}] {msg}")
+                timeline_prog_ph.code("\n".join(timeline_prog_msgs[-300:]))
+
+            timeline_inputs_ok = bool((item.content_raw or "").strip() or (item.audio_url or "").strip())
+            if not timeline_inputs_ok:
+                st.caption("Add a transcript (crawl or transcript-from-audio) or an audio URL to generate a timeline.")
+            if st.button(
+                "Generate timeline summary",
+                icon=":material/view_timeline:",
+                key=f"generate_timeline_summary_{item_id}",
+                disabled=not can_edit_admin_fields or not timeline_inputs_ok,
+            ):
+                try:
+                    with st.spinner("Generating timeline summary..."):
+                        generate_podcast_timeline_summary(
+                            item_id, progress_callback=timeline_progress
+                        )
+                        # model_name = item.summary_model or "openai/gpt-5.4-mini"
+                        # summarize_news_item(
+                        #     item_id,
+                        #     item.title,
+                        #     "",
+                        #     model_name=model_name,
+                        # )
+                    st.success("Timeline summary saved; article summary refreshed.")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Timeline summary generation failed: {e}")
+
     summary_text = st.text_area(
         "Summary",
         value=item.content_summary or "",
         key=f"summary_{item_id}",
         height=180,
         disabled=not can_edit_admin_fields,
-        help="Admins can manually edit and save summary text."
+        help="For podcasts, uses timeline summary → transcript → episode description when regenerating.",
     )
     
     a1, a2 = st.columns([1, 2])
@@ -153,10 +233,13 @@ def show_news_item_modal(item_id: int):
                     key=f"regen_summary_{item_id}",
                     disabled=not can_edit_admin_fields):
             model_name = item.summary_model or "openai/gpt-5.4-mini"
+            summary_source = item.content_raw
+            if _item_is_podcast_like(item):
+                summary_source = item.podcast_timeline_summary or item.content_raw or item.episode_description
             summarize_news_item(
                 item_id,
                 item.title,
-                item.content_raw or item.episode_description or "",
+                summary_source,
                 model_name=model_name,
             )
             # extract_metadata(item_id, item.title, item.content_raw or "", model_name=model_name)
@@ -447,7 +530,7 @@ with tab_news:
                         else:
                             st.caption("📰")
                     with s_text_col:
-                        st.caption(f"{(item.content_summary or '').strip()[:400]}...")
+                        st.caption(item.content_summary or '')
                         if item.audio_url:
                             st.audio(item.audio_url)
                         # duration_text = format_episode_duration(item.episode_duration_seconds)
@@ -761,36 +844,100 @@ with tab_config:
                         help="Use {title}, {start_date}, {end_date}, {content}."
                     )
 
-                # Row 4: Podcast transcription
-                st.markdown("### Podcast Transcription")
-                p_left, p_right = st.columns([1, 1])
-                with p_left:
-                    podcast_transcription_model = st.selectbox(
-                        "Podcast transcription model",
+                # Row 4: Podcast — transcript from audio, timeline from audio, timeline from text
+                st.markdown("### Podcast: transcript from audio")
+                st.caption("Chunked audio → detailed transcript; writes **Raw content** (`content_raw`) only.")
+                ptr_left, ptr_right = st.columns([1, 1])
+                with ptr_left:
+                    podcast_transcript_audio_model = st.selectbox(
+                        "Transcript-from-audio model",
                         options=audio_model_options,
-                        index=audio_model_options.index(getattr(config, "podcast_transcription_model", "xiaomi/mimo-v2.5"))
-                        if getattr(config, "podcast_transcription_model", "xiaomi/mimo-v2.5") in audio_model_options else 0,
+                        index=audio_model_options.index(
+                            getattr(config, "podcast_transcript_from_audio_model", "xiaomi/mimo-v2-omni")
+                        )
+                        if getattr(config, "podcast_transcript_from_audio_model", "xiaomi/mimo-v2-omni")
+                        in audio_model_options else 0,
+                        key="podcast_tr_audio_model",
                     )
-                    podcast_price = get_model_price(podcast_transcription_model, 'OpenRouter')
-                    if podcast_price:
-                        st.caption("Podcast transcription model price")
-                        st.json(podcast_price)
-                with p_right:
-                    podcast_first_prompt = st.text_area(
-                        "Podcast first chunk prompt",
-                        value=(
-                            getattr(config, "podcast_transcription_first_prompt_template", None)
-                        ),
-                        height=220,
-                        help="Use {chunk_number}, {total_chunks}, {start_time}, {end_time}, {episode_description}."
+                    ptr_price = get_model_price(podcast_transcript_audio_model, "OpenRouter")
+                    if ptr_price:
+                        st.caption("Model price")
+                        st.json(ptr_price)
+                with ptr_right:
+                    podcast_transcript_first = st.text_area(
+                        "First chunk prompt (transcript)",
+                        value=config.podcast_transcript_from_audio_first_prompt_template or "",
+                        height=200,
+                        help="Placeholders: {chunk_number}, {total_chunks}, {start_time}, {end_time}, {episode_description}.",
+                        key="podcast_tr_first",
                     )
-                    podcast_followup_prompt = st.text_area(
-                        "Podcast follow-up chunk prompt",
-                        value=(
-                            getattr(config, "podcast_transcription_followup_prompt_template", None)
-                        ),
-                        height=280,
-                        help="Use {chunk_number}, {total_chunks}, {start_time}, {end_time}, {episode_description}, {speaker_context}."
+                    podcast_transcript_followup = st.text_area(
+                        "Follow-up chunk prompt (transcript)",
+                        value=config.podcast_transcript_from_audio_followup_prompt_template or "",
+                        height=240,
+                        help="Adds {speaker_context}.",
+                        key="podcast_tr_follow",
+                    )
+
+                st.markdown("### Podcast: timeline from audio")
+                st.caption("Chunked audio → timeline markdown; writes **Timeline summary** (`podcast_timeline_summary`) only.")
+                pta_left, pta_right = st.columns([1, 1])
+                with pta_left:
+                    podcast_timeline_audio_model = st.selectbox(
+                        "Timeline-from-audio model",
+                        options=audio_model_options,
+                        index=audio_model_options.index(
+                            getattr(config, "podcast_timeline_from_audio_model", "xiaomi/mimo-v2-omni")
+                        )
+                        if getattr(config, "podcast_timeline_from_audio_model", "xiaomi/mimo-v2-omni")
+                        in audio_model_options else 0,
+                        key="podcast_tl_audio_model",
+                    )
+                    pta_price = get_model_price(podcast_timeline_audio_model, "OpenRouter")
+                    if pta_price:
+                        st.caption("Model price")
+                        st.json(pta_price)
+                with pta_right:
+                    podcast_timeline_audio_first = st.text_area(
+                        "First chunk prompt (timeline)",
+                        value=config.podcast_timeline_from_audio_first_prompt_template or "",
+                        height=200,
+                        help="Placeholders: {chunk_number}, {total_chunks}, {start_time}, {end_time}, {episode_description}.",
+                        key="podcast_tl_a_first",
+                    )
+                    podcast_timeline_audio_followup = st.text_area(
+                        "Follow-up chunk prompt (timeline)",
+                        value=config.podcast_timeline_from_audio_followup_prompt_template or "",
+                        height=240,
+                        help="Adds {speaker_context}.",
+                        key="podcast_tl_a_follow",
+                    )
+
+                st.markdown("### Podcast: timeline from transcript text")
+                st.caption("Uses **Raw content** as transcript when present; writes **Timeline summary** only.")
+                ptt_left, ptt_right = st.columns([1, 1])
+                with ptt_left:
+                    podcast_timeline_text_model = st.selectbox(
+                        "Timeline-from-text model",
+                        options=model_options,
+                        index=model_options.index(
+                            getattr(config, "podcast_timeline_from_text_model", "openai/gpt-5.4-mini")
+                        )
+                        if getattr(config, "podcast_timeline_from_text_model", "openai/gpt-5.4-mini")
+                        in model_options else 0,
+                        key="podcast_tl_text_model",
+                    )
+                    ptt_price = get_model_price(podcast_timeline_text_model, "OpenRouter")
+                    if ptt_price:
+                        st.caption("Model price")
+                        st.json(ptt_price)
+                with ptt_right:
+                    podcast_timeline_text_template = st.text_area(
+                        "Timeline-from-text prompt",
+                        value=config.podcast_timeline_from_text_prompt_template or "",
+                        height=360,
+                        help="Placeholders: {title}, {episode_description}, {transcript}.",
+                        key="podcast_tl_text_tmpl",
                     )
                 
                 if st.button("Save LLM Configuration", type="primary"):
@@ -802,9 +949,14 @@ with tab_config:
                     config.foreword_model = foreword_model
                     # config.foreword_max_tokens = foreword_max_tokens
                     config.translation_model = translation_model
-                    config.podcast_transcription_model = podcast_transcription_model
-                    config.podcast_transcription_first_prompt_template = podcast_first_prompt
-                    config.podcast_transcription_followup_prompt_template = podcast_followup_prompt
+                    config.podcast_transcript_from_audio_model = podcast_transcript_audio_model
+                    config.podcast_transcript_from_audio_first_prompt_template = podcast_transcript_first
+                    config.podcast_transcript_from_audio_followup_prompt_template = podcast_transcript_followup
+                    config.podcast_timeline_from_audio_model = podcast_timeline_audio_model
+                    config.podcast_timeline_from_audio_first_prompt_template = podcast_timeline_audio_first
+                    config.podcast_timeline_from_audio_followup_prompt_template = podcast_timeline_audio_followup
+                    config.podcast_timeline_from_text_model = podcast_timeline_text_model
+                    config.podcast_timeline_from_text_prompt_template = podcast_timeline_text_template
                     # config.translation_max_tokens = translation_max_tokens
                     # config.max_summary_tokens = max_tokens
                     # config.relevance_threshold = relevance_threshold

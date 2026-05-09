@@ -3,28 +3,63 @@ from sqlalchemy import Column, String, Integer, Float, DateTime, Text
 from BogoBots.database.base import BaseModel
 
 
-PODCAST_TRANSCRIPTION_FIRST_PROMPT_DEFAULT = '''This is podcast audio segment {chunk_number} of {total_chunks}, covering approximately {start_time} to {end_time}.
+# Timeline from audio (chunked input_audio) — structured episode timeline, not raw transcript
+PODCAST_TIMELINE_FROM_AUDIO_FIRST_PROMPT_DEFAULT = '''This is podcast audio segment {chunk_number} of {total_chunks}, covering approximately {start_time} to {end_time}.
 
 Episode description:
 {episode_description}
 
-Please listen to this first segment and produce a detailed timeline-based markdown transcript/summary in the original language. Do not translate to Chinese.
+Listen to this segment and produce a detailed markdown timeline for the episode in the original language. Cover key beats, topics, and takeaways with approximate timing. Do not translate to Chinese.
 
-Start with a `## Speaker Info` section. Identify the speaker(s), their roles, and useful voice/context clues. If names are unclear, use `Speaker 1`, `Speaker 2`, etc.
-
-After that, include the timeline content. Attribute each item to the speaker, for example `00:03:12 - Speaker 1: ...`.'''
+Start with a `## Speaker Info` section if multiple voices are audible. Then timeline items, for example `00:03:12 - Topic or speaker: ...`. Do not output a full word-for-word transcript here.'''
 
 
-PODCAST_TRANSCRIPTION_FOLLOWUP_PROMPT_DEFAULT = '''This is podcast audio segment {chunk_number} of {total_chunks}, covering approximately {start_time} to {end_time}.
+PODCAST_TIMELINE_FROM_AUDIO_FOLLOWUP_PROMPT_DEFAULT = '''This is podcast audio segment {chunk_number} of {total_chunks}, covering approximately {start_time} to {end_time}.
 
 Episode description:
 {episode_description}
 
-Use the speaker information from the first segment below to keep speaker labels consistent. If a new speaker appears, add a short note before the timeline item and assign the next speaker label.
+Use the speaker/context information from earlier segments below to stay consistent.
 
 {speaker_context}
 
-Listen to this segment and produce a detailed timeline-based markdown transcript/summary in the original language. Do not translate to Chinese. Attribute each timeline item to the speaker, for example `00:33:12 - Speaker 1: ...`. Do not add a title or repeat the segment number.'''
+Continue the markdown timeline in the original language for this segment only. Do not translate to Chinese. Do not repeat segment numbering or titles.'''
+
+
+# Transcript from audio (chunked) — timestamped transcript / speaker attribution only
+PODCAST_TRANSCRIPT_FROM_AUDIO_FIRST_PROMPT_DEFAULT = '''This is podcast audio segment {chunk_number} of {total_chunks}, covering approximately {start_time} to {end_time}.
+
+Episode description:
+{episode_description}
+
+Transcribe this segment in the original language. Output timestamped lines with speaker labels where possible (e.g. `00:03:12 Speaker 1: ...`). Do not add a high-level episode summary or timeline overview — transcript only. Do not translate to Chinese.
+
+Start with a short `## Speaker Info` block listing who is speaking if you can tell.'''
+
+
+PODCAST_TRANSCRIPT_FROM_AUDIO_FOLLOWUP_PROMPT_DEFAULT = '''This is podcast audio segment {chunk_number} of {total_chunks}, covering approximately {start_time} to {end_time}.
+
+Episode description:
+{episode_description}
+
+Continue using this speaker context for consistent labels:
+
+{speaker_context}
+
+Transcribe this segment only in the original language. Timestamped transcript lines only; no episode summary. Do not translate to Chinese.'''
+
+
+PODCAST_TIMELINE_FROM_TEXT_PROMPT_DEFAULT = '''You are given a podcast episode transcript. Produce a detailed markdown timeline summary in the original language. Focus on topics, arguments, and takeaways with time references where the transcript provides them. Do not translate to Chinese.
+
+Title: {title}
+
+Episode description:
+{episode_description}
+
+Transcript:
+{transcript}
+
+Timeline summary:'''
 
 
 class NewsHubConfig(BaseModel):
@@ -66,17 +101,44 @@ Markdown:
     foreword_max_tokens = Column(Integer, default=400, comment='Max tokens for foreword generation')
     translation_model = Column(String(100), default='openai/gpt-5.4-mini', comment='LLM model for report translation')
     translation_max_tokens = Column(Integer, default=5000, comment='Max tokens for translation generation')
-    podcast_transcription_model = Column(String(100), default='xiaomi/mimo-v2-omni', comment='LLM model for podcast transcription')
-    podcast_transcription_first_prompt_template = Column(
-        Text,
-        default=PODCAST_TRANSCRIPTION_FIRST_PROMPT_DEFAULT,
-        comment='Prompt template for first podcast audio chunk'
+
+    podcast_transcript_from_audio_model = Column(
+        String(100), default='xiaomi/mimo-v2-omni', comment='LLM for podcast transcript-from-audio (writes content_raw)'
     )
-    podcast_transcription_followup_prompt_template = Column(
+    podcast_transcript_from_audio_first_prompt_template = Column(
         Text,
-        default=PODCAST_TRANSCRIPTION_FOLLOWUP_PROMPT_DEFAULT,
-        comment='Prompt template for later podcast audio chunks with speaker context'
+        default=PODCAST_TRANSCRIPT_FROM_AUDIO_FIRST_PROMPT_DEFAULT,
+        comment='First-chunk prompt for transcript from audio',
     )
+    podcast_transcript_from_audio_followup_prompt_template = Column(
+        Text,
+        default=PODCAST_TRANSCRIPT_FROM_AUDIO_FOLLOWUP_PROMPT_DEFAULT,
+        comment='Follow-up chunk prompt for transcript from audio',
+    )
+
+    podcast_timeline_from_audio_model = Column(
+        String(100), default='xiaomi/mimo-v2-omni', comment='LLM for podcast timeline-from-audio (writes podcast_timeline_summary)'
+    )
+    podcast_timeline_from_audio_first_prompt_template = Column(
+        Text,
+        default=PODCAST_TIMELINE_FROM_AUDIO_FIRST_PROMPT_DEFAULT,
+        comment='First-chunk prompt for timeline from audio',
+    )
+    podcast_timeline_from_audio_followup_prompt_template = Column(
+        Text,
+        default=PODCAST_TIMELINE_FROM_AUDIO_FOLLOWUP_PROMPT_DEFAULT,
+        comment='Follow-up chunk prompt for timeline from audio',
+    )
+
+    podcast_timeline_from_text_model = Column(
+        String(100), default='openai/gpt-5.4-mini', comment='LLM for podcast timeline from transcript text'
+    )
+    podcast_timeline_from_text_prompt_template = Column(
+        Text,
+        default=PODCAST_TIMELINE_FROM_TEXT_PROMPT_DEFAULT,
+        comment='Prompt for timeline summary from transcript; use {title} {episode_description} {transcript}',
+    )
+
     max_summary_tokens = Column(Integer, default=200, comment='Max tokens per summary')
     relevance_threshold = Column(Float, default=0.3, comment='Minimum relevance score to include')
     

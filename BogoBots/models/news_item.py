@@ -16,6 +16,7 @@ class NewsItem(BaseModel):
     author = Column(String(200), comment='Content author')
     published_at = Column(DateTime, nullable=False, index=True, comment='Original publish time')
     content_raw = Column(Text, comment='Raw content in markdown')
+    podcast_timeline_summary = Column(Text, comment='LLM podcast timeline summary from transcript or audio')
     content_summary = Column(Text, comment='LLM-generated summary')
     episode_description = Column(Text, comment='Podcast episode description/show notes')
     episode_duration_seconds = Column(Integer, comment='Podcast episode duration in seconds')

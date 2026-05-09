@@ -132,6 +132,110 @@ def _split_long_tokens(text: str, max_len: int = 70) -> str:
     return " ".join(fixed)
 
 
+def _split_gfm_table_row(line: str) -> list[str]:
+    """Split a pipe table row into cell strings (GFM allows optional leading/trailing `|`)."""
+    s = (line or "").strip()
+    if s.startswith("|"):
+        s = s[1:]
+    if s.endswith("|"):
+        s = s[:-1]
+    return [c.strip() for c in s.split("|")]
+
+
+def _is_gfm_table_separator_line(stripped: str) -> bool:
+    """True if line is `| --- | :---: |` style alignment row."""
+    if "|" not in stripped:
+        return False
+    cells = _split_gfm_table_row(stripped)
+    if not cells:
+        return False
+    for c in cells:
+        if not re.match(r"^:?-{3,}:?$", c):
+            return False
+    return True
+
+
+def _gfm_separator_alignments(stripped: str) -> list[str]:
+    """Map separator row to th/td text-align values: left, center, right."""
+    cells = _split_gfm_table_row(stripped)
+    out = []
+    for c in cells:
+        if c.startswith(":") and c.endswith(":"):
+            out.append("center")
+        elif c.endswith(":"):
+            out.append("right")
+        elif c.startswith(":"):
+            out.append("left")
+        else:
+            out.append("left")
+    return out
+
+
+def _consume_gfm_table(lines: list[str], start: int) -> tuple[str, int]:
+    """
+    Parse a GFM pipe table starting at lines[start] (header).
+    Preconditions: start + 1 exists and is a separator row.
+    Returns (html_fragment, next_line_index).
+    """
+    header_cells = _split_gfm_table_row(lines[start])
+    align = _gfm_separator_alignments(lines[start + 1].strip())
+    n = len(header_cells)
+    if len(align) < n:
+        align.extend(["left"] * (n - len(align)))
+    elif len(align) > n:
+        align = align[:n]
+
+    thead_parts = ["<thead><tr>"]
+    for j, cell in enumerate(header_cells):
+        a = align[j] if j < len(align) else "left"
+        thead_parts.append(
+            f'<th style="text-align: {a}">{_format_inline_markdown(cell)}</th>'
+        )
+    thead_parts.append("</tr></thead>")
+    tbody_parts = ["<tbody>"]
+    i = start + 2
+    while i < len(lines):
+        stripped = lines[i].strip()
+        if not stripped:
+            break
+        if "|" not in stripped:
+            break
+        if _is_gfm_table_separator_line(stripped):
+            break
+        row_cells = _split_gfm_table_row(lines[i])
+        tbody_parts.append("<tr>")
+        for j in range(n):
+            cell_text = row_cells[j] if j < len(row_cells) else ""
+            a = align[j] if j < len(align) else "left"
+            tbody_parts.append(
+                f'<td style="text-align: {a}">{_format_inline_markdown(cell_text)}</td>'
+            )
+        tbody_parts.append("</tr>")
+        i += 1
+    tbody_parts.append("</tbody>")
+    html = (
+        '<table class="md-table">'
+        + "".join(thead_parts)
+        + "".join(tbody_parts)
+        + "</table>"
+    )
+    return html, i
+
+
+def _line_starts_gfm_table(lines: list[str], idx: int) -> bool:
+    if idx + 1 >= len(lines):
+        return False
+    row = lines[idx].strip()
+    if "|" not in row:
+        return False
+    if _is_gfm_table_separator_line(row):
+        return False
+    head_cells = _split_gfm_table_row(row)
+    if len(head_cells) < 2:
+        return False
+    return _is_gfm_table_separator_line(lines[idx + 1].strip())
+
+
 def _format_inline_markdown(text: str) -> str:
     raw_text = text or ""
     link_placeholders = {}
@@ -222,6 +326,13 @@ def markdown_to_html(markdown_text: str, report_title: str = "AI Report") -> str
                 html_parts.append("</ul>")
                 in_list = False
             html_parts.append("<hr/>")
+        elif _line_starts_gfm_table(lines, i):
+            if in_list:
+                html_parts.append("</ul>")
+                in_list = False
+            table_html, i = _consume_gfm_table(lines, i)
+            html_parts.append(table_html)
+            continue
         else:
             if in_list:
                 html_parts.append("</ul>")
@@ -246,6 +357,13 @@ def markdown_to_html(markdown_text: str, report_title: str = "AI Report") -> str
       blockquote { margin: 24px 0; padding: 16px 10px; border-left: 3px solid #374151; color: #374151; background: #f9fafb; }
       code { background: #f3f4f6; padding: 1px 4px; border-radius: 3px; }
       hr { border: none; border-top: 1px solid #e5e7eb; margin: 16px 0 24px; }
+      table.md-table { border-collapse: collapse; width: 100%; margin: 14px 0; font-size: 14px; }
+      table.md-table th, table.md-table td {
+        border: 1px solid #e5e7eb;
+        padding: 8px 10px;
+        vertical-align: top;
+      }
+      table.md-table th { background: #f9fafb; font-weight: 600; color: #111827; }
     </style>
     """
 
