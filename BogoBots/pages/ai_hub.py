@@ -344,7 +344,7 @@ def show_source_edit_modal(source_id: int):
                 st.error("Failed to delete source")
 
 
-REPORT_CATEGORY_ORDER = ["Top Story", "New Release", "Deep Focus", "Trending", "Fun Stuff"]
+REPORT_CATEGORY_ORDER = ["Top Story", "New Release", "Deep Focus", "Trending", "Podcasts", "Fun Stuff"]
 
 
 def suggest_report_category(item) -> str:
@@ -358,6 +358,8 @@ def suggest_report_category(item) -> str:
         return "New Release"
     if any(k in title for k in ["paper", "research", "benchmark", "method", "survey"]):
         return "Deep Focus"
+    if news_type == "Podcast":
+        return "Podcasts"
     return "Trending"
 
 
@@ -1166,7 +1168,7 @@ with tab_report:
                             st.caption("📰")
                     with s_text_col:
                         if item.content_summary:
-                            st.caption(item.content_summary[:400])
+                            st.caption(item.content_summary)
                         st.caption(
                             f"{item.source.name if item.source else 'Unknown'} | "
                             f"{item.source.news_type if item.source else 'N/A'} | "
@@ -1317,7 +1319,7 @@ with tab_report:
                         st.markdown('---')
                         zh_default_title = (
                             f"AI新闻周报（{(report.news_from.strftime('%Y-%m-%d') if report.news_from else report.report_date.strftime('%Y-%m-%d'))}"
-                            f" - {(report.news_to.strftime('%Y-%m-%d') if report.news_to else report.report_date.strftime('%Y-%m-%d'))}）"
+                            f" ~ {(report.news_to.strftime('%Y-%m-%d') if report.news_to else report.report_date.strftime('%Y-%m-%d'))}）"
                         )
                         zh_title = st.text_input(
                             "Chinese report title",

@@ -70,9 +70,14 @@ class PodcastAdapter(RSSAdapter):
             author = self._extract_author(entry, feed)
             image_urls = self._extract_images(entry)
 
+            title = entry.get('title', 'Untitled')
+
+            if self.news_source.name not in title:
+                title += f" | {self.news_source.name}"
+
             item = RawNewsItem(
                 external_id=external_id,
-                title=entry.get('title', 'Untitled'),
+                title=title,
                 url=link,
                 author=author,
                 published_at=published_at,
