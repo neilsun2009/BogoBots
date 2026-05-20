@@ -26,6 +26,24 @@ Use the speaker/context information from earlier segments below to stay consiste
 Continue the markdown timeline in the original language for this segment only. Do not translate to Chinese. Do not repeat segment numbering or titles.'''
 
 
+PODCAST_TIMELINE_FROM_AUDIO_TAKEAWAYS_PROMPT_DEFAULT = '''You are given chunk-level timeline notes for one podcast episode. Merge them into one coherent markdown table and append a final section named `## Key Takeaways`.
+
+Title: {title}
+
+Episode description:
+{episode_description}
+
+Chunk timeline notes:
+{chunk_timeline_notes}
+
+Requirements:
+- Keep the timeline structure clear and easy to scan, do not leave out any information.
+- Keep original language from the notes. Do not translate.
+- End with `## Key Takeaways` and 5-10 concise bullet points.
+
+Final markdown summary:'''
+
+
 # Transcript from audio (chunked) — timestamped transcript / speaker attribution only
 PODCAST_TRANSCRIPT_FROM_AUDIO_FIRST_PROMPT_DEFAULT = '''This is podcast audio segment {chunk_number} of {total_chunks}, covering approximately {start_time} to {end_time}.
 
@@ -128,6 +146,14 @@ Markdown:
         Text,
         default=PODCAST_TIMELINE_FROM_AUDIO_FOLLOWUP_PROMPT_DEFAULT,
         comment='Follow-up chunk prompt for timeline from audio',
+    )
+    podcast_timeline_from_audio_takeaways_model = Column(
+        String(100), default='openai/gpt-5.4-mini', comment='LLM for final timeline merge + takeaways section'
+    )
+    podcast_timeline_from_audio_takeaways_prompt_template = Column(
+        Text,
+        default=PODCAST_TIMELINE_FROM_AUDIO_TAKEAWAYS_PROMPT_DEFAULT,
+        comment='Final pass prompt for timeline-from-audio; use {title} {episode_description} {chunk_timeline_notes}',
     )
 
     podcast_timeline_from_text_model = Column(

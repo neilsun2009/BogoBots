@@ -357,6 +357,7 @@ def _run_chunked_audio_llm(
                     "total_chunks": total_chunks,
                     "start_seconds": chunk["start_seconds"],
                     "end_seconds": chunk["end_seconds"],
+                    "text": chunk_text,
                     "response": response_json,
                 }
             )
@@ -441,6 +442,7 @@ def generate_podcast_timeline_from_audio_for_item(
     from BogoBots.database.session import get_session
     from BogoBots.models.news_hub_config import NewsHubConfig
     from BogoBots.models.news_item import NewsItem
+    from BogoBots.utils.llm_utils import _chat_completion
 
     session = get_session()
     try:
@@ -454,7 +456,10 @@ def generate_podcast_timeline_from_audio_for_item(
         selected_model = model_name or config.podcast_timeline_from_audio_model or "xiaomi/mimo-v2-omni"
         first_prompt_template = config.podcast_timeline_from_audio_first_prompt_template
         followup_prompt_template = config.podcast_timeline_from_audio_followup_prompt_template
+        takeaways_model = config.podcast_timeline_from_audio_takeaways_model or "openai/gpt-5.4-mini"
+        takeaways_prompt_template = config.podcast_timeline_from_audio_takeaways_prompt_template
         episode_description = item.episode_description or ""
+        title = item.title or ""
         audio_url = item.audio_url
     finally:
         session.close()
@@ -469,13 +474,37 @@ def generate_podcast_timeline_from_audio_for_item(
         followup_prompt_template=followup_prompt_template,
         progress_callback=progress_callback,
     )
+    chunk_timeline_notes = "\n\n".join(
+        f"### Chunk {chunk.get('chunk_number')}\n{(chunk.get('text') or '').strip()}"
+        for chunk in chunk_results
+        if (chunk.get("text") or "").strip()
+    )
+    final_timeline = timeline_text
+    input_tokens = None
+    output_tokens = None
+    if chunk_timeline_notes.strip():
+        _podcast_progress(progress_callback, f"Generating final timeline takeaways with {takeaways_model}")
+        takeaways_prompt = takeaways_prompt_template.format(
+            title=title,
+            episode_description=episode_description,
+            chunk_timeline_notes=chunk_timeline_notes,
+        )
+        final_timeline, input_tokens, output_tokens = _chat_completion(
+            model_name=takeaways_model,
+            prompt=takeaways_prompt,
+            temperature=0.3,
+        )
 
     session = get_session()
     try:
         item = session.query(NewsItem).filter_by(id=item_id).first()
         if item:
-            item.podcast_timeline_summary = timeline_text
-            item.summary_model = selected_model
+            item.podcast_timeline_summary = final_timeline
+            item.summary_model = takeaways_model
+            if input_tokens is not None:
+                item.summary_tokens_input = input_tokens
+            if output_tokens is not None:
+                item.summary_tokens_output = output_tokens
             item.updated_at = datetime.now(timezone.utc)
             session.commit()
     finally:
@@ -483,8 +512,11 @@ def generate_podcast_timeline_from_audio_for_item(
 
     _podcast_progress(progress_callback, "Saved timeline to podcast_timeline_summary")
     return {
-        "timeline": timeline_text,
-        "model": selected_model,
+        "timeline": final_timeline,
+        "model": takeaways_model,
+        "chunk_model": selected_model,
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
         "chunks": chunk_results,
     }
 

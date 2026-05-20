@@ -23,8 +23,12 @@ ALTER TABLE news_hub_config
     COMMENT 'First-chunk prompt for timeline from audio' AFTER podcast_timeline_from_audio_model,
   ADD COLUMN podcast_timeline_from_audio_followup_prompt_template TEXT NULL
     COMMENT 'Follow-up chunk prompt for timeline from audio' AFTER podcast_timeline_from_audio_first_prompt_template,
+  ADD COLUMN podcast_timeline_from_audio_takeaways_model VARCHAR(100) NULL DEFAULT 'openai/gpt-5.4-mini'
+    COMMENT 'LLM for final timeline merge + takeaways section' AFTER podcast_timeline_from_audio_followup_prompt_template,
+  ADD COLUMN podcast_timeline_from_audio_takeaways_prompt_template TEXT NULL
+    COMMENT 'Final pass prompt for timeline-from-audio; use {title} {episode_description} {chunk_timeline_notes}' AFTER podcast_timeline_from_audio_takeaways_model,
   ADD COLUMN podcast_timeline_from_text_model VARCHAR(100) NULL DEFAULT 'openai/gpt-5.4-mini'
-    COMMENT 'LLM for podcast timeline from transcript text' AFTER podcast_timeline_from_audio_followup_prompt_template,
+    COMMENT 'LLM for podcast timeline from transcript text' AFTER podcast_timeline_from_audio_takeaways_prompt_template,
   ADD COLUMN podcast_timeline_from_text_prompt_template TEXT NULL
     COMMENT 'Prompt for timeline summary from transcript; use {title} {episode_description} {transcript}' AFTER podcast_timeline_from_text_model;
 

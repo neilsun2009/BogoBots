@@ -349,7 +349,7 @@ REPORT_CATEGORY_ORDER = ["Top Story", "New Release", "Deep Focus", "Trending", "
 
 def suggest_report_category(item) -> str:
     title = (item.title or "").lower()
-    news_type = (item.source.news_type if item.source else "").lower()
+    source_type = (item.source.source_type if item.source else "")
     priority = (item.source.priority if item.source else "").lower()
 
     if priority == "high":
@@ -358,7 +358,7 @@ def suggest_report_category(item) -> str:
         return "New Release"
     if any(k in title for k in ["paper", "research", "benchmark", "method", "survey"]):
         return "Deep Focus"
-    if news_type == "Podcast":
+    if source_type == "Podcast":
         return "Podcasts"
     return "Trending"
 
@@ -882,7 +882,7 @@ with tab_config:
                     )
 
                 st.markdown("### Podcast: timeline from audio")
-                st.caption("Chunked audio → timeline markdown; writes **Timeline summary** (`podcast_timeline_summary`) only.")
+                st.caption("Chunked audio → per-chunk timeline notes, then a final merge+takeaways pass; writes **Timeline summary** only.")
                 pta_left, pta_right = st.columns([1, 1])
                 with pta_left:
                     podcast_timeline_audio_model = st.selectbox(
@@ -899,6 +899,20 @@ with tab_config:
                     if pta_price:
                         st.caption("Model price")
                         st.json(pta_price)
+                    podcast_timeline_audio_takeaways_model = st.selectbox(
+                        "Final merge+takeaways model",
+                        options=model_options,
+                        index=model_options.index(
+                            getattr(config, "podcast_timeline_from_audio_takeaways_model", "openai/gpt-5.4-mini")
+                        )
+                        if getattr(config, "podcast_timeline_from_audio_takeaways_model", "openai/gpt-5.4-mini")
+                        in model_options else 0,
+                        key="podcast_tl_audio_takeaways_model",
+                    )
+                    pta_takeaways_price = get_model_price(podcast_timeline_audio_takeaways_model, "OpenRouter")
+                    if pta_takeaways_price:
+                        st.caption("Final pass model price")
+                        st.json(pta_takeaways_price)
                 with pta_right:
                     podcast_timeline_audio_first = st.text_area(
                         "First chunk prompt (timeline)",
@@ -913,6 +927,13 @@ with tab_config:
                         height=240,
                         help="Adds {speaker_context}.",
                         key="podcast_tl_a_follow",
+                    )
+                    podcast_timeline_audio_takeaways_prompt = st.text_area(
+                        "Final merge+takeaways prompt",
+                        value=getattr(config, "podcast_timeline_from_audio_takeaways_prompt_template", "") or "",
+                        height=220,
+                        help="Placeholders: {title}, {episode_description}, {chunk_timeline_notes}.",
+                        key="podcast_tl_a_takeaways_prompt",
                     )
 
                 st.markdown("### Podcast: timeline from transcript text")
@@ -957,6 +978,8 @@ with tab_config:
                     config.podcast_timeline_from_audio_model = podcast_timeline_audio_model
                     config.podcast_timeline_from_audio_first_prompt_template = podcast_timeline_audio_first
                     config.podcast_timeline_from_audio_followup_prompt_template = podcast_timeline_audio_followup
+                    config.podcast_timeline_from_audio_takeaways_model = podcast_timeline_audio_takeaways_model
+                    config.podcast_timeline_from_audio_takeaways_prompt_template = podcast_timeline_audio_takeaways_prompt
                     config.podcast_timeline_from_text_model = podcast_timeline_text_model
                     config.podcast_timeline_from_text_prompt_template = podcast_timeline_text_template
                     # config.translation_max_tokens = translation_max_tokens
