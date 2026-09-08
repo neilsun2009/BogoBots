@@ -46,6 +46,9 @@ def render_unlock_form():
         elif pin == st.secrets['access_pin']['vip']:
             st.session_state.update({'access_level': access_level['vip']})
             st.balloons()
+        elif pin == st.secrets['access_pin']['bb']:
+            st.session_state.update({'access_level': access_level['bb']})
+            st.balloons()
         else:
             st.toast('Invalid pin! Please try again.', icon='❌')
    

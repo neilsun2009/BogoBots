@@ -1,4 +1,5 @@
 import base64
+import hashlib
 import json
 import mimetypes
 import shutil
@@ -15,6 +16,7 @@ import requests
 
 PODCAST_CHUNK_SECONDS = 20 * 60
 AUDIO_CHUNK_MAX_ATTEMPTS = 3
+PODCAST_CHUNK_LLM_CACHE_BASE = Path("static/podcast_chunk_llm_cache")
 
 
 def _podcast_progress(progress_callback: Optional[Callable[[str], None]], message: str):
@@ -302,6 +304,58 @@ def _transcribe_audio_chunk_with_retries(
     ) from last_exc
 
 
+def _chunk_llm_cache_dir(item_id: int) -> Path:
+    return PODCAST_CHUNK_LLM_CACHE_BASE / f"item_{item_id}"
+
+
+def _chunk_llm_cache_path(
+    item_id: int,
+    audio_url: str,
+    model_name: str,
+    chunk_number: int,
+    prompt: str,
+) -> Path:
+    fingerprint = hashlib.sha256(
+        json.dumps(
+            {
+                "item_id": item_id,
+                "audio_url": audio_url,
+                "model_name": model_name,
+                "chunk_number": chunk_number,
+                "prompt": prompt,
+            },
+            sort_keys=True,
+            ensure_ascii=False,
+        ).encode("utf-8")
+    ).hexdigest()[:16]
+    return _chunk_llm_cache_dir(item_id) / f"chunk_{chunk_number:03d}_{fingerprint}.json"
+
+
+def _load_chunk_llm_cache(cache_path: Path) -> Optional[Dict[str, Any]]:
+    if not cache_path.exists():
+        return None
+    try:
+        cached = json.loads(cache_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, ValueError):
+        return None
+    if not isinstance(cached, dict) or not cached.get("text"):
+        return None
+    return cached
+
+
+def _save_chunk_llm_cache(cache_path: Path, payload: Dict[str, Any]) -> None:
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    cache_path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+
+
+def _clear_chunk_llm_cache(item_id: int, progress_callback=None) -> None:
+    cache_dir = _chunk_llm_cache_dir(item_id)
+    if not cache_dir.exists():
+        return
+    shutil.rmtree(cache_dir, ignore_errors=True)
+    _podcast_progress(progress_callback, f"Cleared chunk LLM cache for item {item_id}")
+
+
 def _run_chunked_audio_llm(
     *,
     item_id: int,
@@ -312,6 +366,7 @@ def _run_chunked_audio_llm(
     first_prompt_template: str,
     followup_prompt_template: str,
     progress_callback: Optional[Callable[[str], None]] = None,
+    use_cache: bool = True,
 ) -> tuple[str, List[Dict[str, Any]]]:
     """Download audio, chunk, call OpenRouter per chunk, return combined markdown and chunk metadata."""
     if not api_key:
@@ -340,27 +395,44 @@ def _run_chunked_audio_llm(
                 episode_description=episode_description,
                 speaker_context=speaker_context,
             )
-            response_json = _transcribe_audio_chunk_with_retries(
-                chunk=chunk,
-                chunk_number=chunk_number,
-                total_chunks=total_chunks,
+            cache_path = _chunk_llm_cache_path(
+                item_id=item_id,
+                audio_url=audio_url,
                 model_name=model_name,
+                chunk_number=chunk_number,
                 prompt=prompt,
-                api_key=api_key,
-                progress_callback=progress_callback,
             )
-            chunk_text = _extract_openrouter_text(response_json)
+            cached = _load_chunk_llm_cache(cache_path) if use_cache else None
+            if cached:
+                _podcast_progress(
+                    progress_callback,
+                    f"Using cached LLM result for chunk {chunk_number}/{total_chunks}",
+                )
+                chunk_text = cached["text"]
+                response_json = cached.get("response") or {}
+            else:
+                response_json = _transcribe_audio_chunk_with_retries(
+                    chunk=chunk,
+                    chunk_number=chunk_number,
+                    total_chunks=total_chunks,
+                    model_name=model_name,
+                    prompt=prompt,
+                    api_key=api_key,
+                    progress_callback=progress_callback,
+                )
+                chunk_text = _extract_openrouter_text(response_json)
             transcript_parts.append(chunk_text)
-            chunk_results.append(
-                {
-                    "chunk_number": chunk_number,
-                    "total_chunks": total_chunks,
-                    "start_seconds": chunk["start_seconds"],
-                    "end_seconds": chunk["end_seconds"],
-                    "text": chunk_text,
-                    "response": response_json,
-                }
-            )
+            chunk_result = {
+                "chunk_number": chunk_number,
+                "total_chunks": total_chunks,
+                "start_seconds": chunk["start_seconds"],
+                "end_seconds": chunk["end_seconds"],
+                "text": chunk_text,
+                "response": response_json,
+            }
+            chunk_results.append(chunk_result)
+            if use_cache and not cached and chunk_text:
+                _save_chunk_llm_cache(cache_path, chunk_result)
             if chunk_number == 1:
                 speaker_context = _extract_speaker_context(chunk_text)
                 if speaker_context:
@@ -507,6 +579,7 @@ def generate_podcast_timeline_from_audio_for_item(
                 item.summary_tokens_output = output_tokens
             item.updated_at = datetime.now(timezone.utc)
             session.commit()
+            _clear_chunk_llm_cache(item_id, progress_callback=progress_callback)
     finally:
         session.close()
 

@@ -84,6 +84,7 @@ def show_news_item_modal(item_id: int):
     st.write(f"**Published:** {item.published_at}")
     st.write(f"**Link:** {item.url}")
     can_edit_admin_fields = st.session_state.get('access_level', 0) >= access_level['admin']
+    can_call_vip_features = st.session_state.get('access_level', 0) >= access_level['vip']
     is_podcast_item = _item_is_podcast_like(item)
 
     if item.audio_url:
@@ -108,7 +109,7 @@ def show_news_item_modal(item_id: int):
                 "Generate transcript from audio",
                 icon=":material/graphic_eq:",
                 key=f"generate_podcast_transcript_{item_id}",
-                disabled=not can_edit_admin_fields,
+                disabled=not can_edit_admin_fields and not can_call_vip_features,
             ):
                 try:
                     with st.spinner("Generating transcript from audio..."):
@@ -129,7 +130,7 @@ def show_news_item_modal(item_id: int):
             if st.button("Retry Markdown via Jina",
                         icon=":material/restore_page:",
                         key=f"retry_jina_{item_id}",
-                        disabled=not can_edit_admin_fields):
+                        disabled=not can_edit_admin_fields and not can_call_vip_features):
                 source = item.source
                 if source:
                     crawler = get_crawler_for_source(source)
@@ -187,7 +188,7 @@ def show_news_item_modal(item_id: int):
                 "Generate timeline summary",
                 icon=":material/view_timeline:",
                 key=f"generate_timeline_summary_{item_id}",
-                disabled=not can_edit_admin_fields or not timeline_inputs_ok,
+                disabled=(not can_edit_admin_fields and not can_call_vip_features) or not timeline_inputs_ok,
             ):
                 try:
                     with st.spinner("Generating timeline summary..."):
@@ -211,7 +212,7 @@ def show_news_item_modal(item_id: int):
         value=item.content_summary or "",
         key=f"summary_{item_id}",
         height=180,
-        disabled=not can_edit_admin_fields,
+        disabled=not can_edit_admin_fields and not can_call_vip_features,
         help="For podcasts, uses timeline summary → transcript → episode description when regenerating.",
     )
     
@@ -222,7 +223,7 @@ def show_news_item_modal(item_id: int):
                 icon=":material/save:",
                 key=f"save_summary_{item_id}",
                 type="tertiary",
-                disabled=not can_edit_admin_fields):
+                disabled=not can_edit_admin_fields and not can_call_vip_features):
             NewsItemService.update_item(item_id, content_summary=summary_text)
             st.success("Summary saved.")
             st.rerun()
@@ -231,7 +232,7 @@ def show_news_item_modal(item_id: int):
                     icon=":material/article_shortcut:",
                     type="tertiary",
                     key=f"regen_summary_{item_id}",
-                    disabled=not can_edit_admin_fields):
+                    disabled=not can_edit_admin_fields and not can_call_vip_features):
             model_name = item.summary_model or "openai/gpt-5.4-mini"
             summary_source = item.content_raw
             if _item_is_podcast_like(item):
@@ -394,6 +395,12 @@ with st.sidebar:
     access = st.session_state.get('access_level', 0)
     if access >= access_level['admin']:
         st.success("Admin access granted")
+    elif access >= access_level['bb']:
+        st.info("Welcome BB!")
+        # render_unlock_form()
+    elif access >= access_level['vip']:
+        st.info("VIP access")
+        # render_unlock_form()
     elif access >= access_level['friend']:
         st.info("Friend access")
         render_unlock_form()

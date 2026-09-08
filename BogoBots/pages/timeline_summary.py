@@ -59,6 +59,8 @@ with st.sidebar:
     access = st.session_state.get("access_level", 0)
     if access >= access_level["admin"]:
         st.success("Admin access granted")
+    elif access >= access_level["bb"]:
+        st.info("Welcome BB!")
     elif access >= access_level["vip"]:
         st.info("VIP access")
     elif access >= access_level["friend"]:
@@ -73,7 +75,7 @@ st.title("📝 Transcription timeline summary")
 is_friend = st.session_state.get("access_level", 0) >= access_level["friend"]
 
 if not is_friend:
-    st.warning("Friend access required. Unlock with the friend PIN in the sidebar.")
+    st.warning("Friend access required. Unlock with the PIN in the sidebar.")
     st.stop()
 
 model_options = _flatten_openrouter_models()
