@@ -65,15 +65,15 @@ class RSSAdapter(BaseNewsCrawler):
                     self._emit_progress("Missing pubDate -> skipped (limit reached)")
                     continue
             
+            # Skip if older than 'since'
+            if published_at < since_utc:
+                continue
+            
             # Fast duplicate check by guid/external id BEFORE fetching full content via jina
             if external_id and self.check_duplicate(external_id=external_id, title=None, published_at=None):
                 self._emit_progress(f"Skip duplicate by guid: {external_id}")
                 continue
 
-            
-            # Skip if older than 'since'
-            if published_at < since_utc:
-                continue
             
             # Use only structured RSS fields and fetch markdown from r.jina.ai
             link = entry.get('link', '')
