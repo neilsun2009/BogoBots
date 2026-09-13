@@ -2,6 +2,8 @@ FROM python:3.12-slim
 
 WORKDIR /app/BogoBots
 
+ENV TZ=Asia/Shanghai
+
 RUN apt-get update && apt-get install -y \
     build-essential \
     curl \
@@ -10,6 +12,9 @@ RUN apt-get update && apt-get install -y \
     ffmpeg \
     default-libmysqlclient-dev \
     pkg-config \
+    tzdata \
+    && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime \
+    && echo $TZ > /etc/timezone \
     && rm -rf /var/lib/apt/lists/*
 
 COPY . /app/BogoBots
