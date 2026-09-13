@@ -3,7 +3,15 @@ set -u
 
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"      # .../BogoBots/BogoBots
 REPO_ROOT="$(cd "$PROJECT_DIR/.." && pwd)"           # .../BogoBots
-PYTHON_BIN="${PYTHON_BIN:-/home/$(whoami)/miniconda3/envs/bogo/bin/python}"
+if [ -z "${PYTHON_BIN:-}" ]; then
+  if [ -x /usr/local/bin/python3 ]; then
+    PYTHON_BIN="/usr/local/bin/python3"
+  elif [ -x "/home/$(whoami)/miniconda3/envs/bogo/bin/python" ]; then
+    PYTHON_BIN="/home/$(whoami)/miniconda3/envs/bogo/bin/python"
+  else
+    PYTHON_BIN="python3"
+  fi
+fi
 
 cd "$PROJECT_DIR" || exit 1
 

@@ -13,13 +13,21 @@ RUN apt-get update && apt-get install -y \
     default-libmysqlclient-dev \
     pkg-config \
     tzdata \
+    cron \
+    util-linux \
     && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime \
     && echo $TZ > /etc/timezone \
     && rm -rf /var/lib/apt/lists/*
 
 COPY . /app/BogoBots
 
-RUN pip3 install -r requirements.txt
+RUN pip3 install -r requirements.txt \
+    && chmod +x /app/BogoBots/scripts/ai_news_cron.sh \
+        /app/BogoBots/scripts/register_ai_news_cron.sh \
+        /app/BogoBots/scripts/docker-entrypoint.sh \
+    && cp /app/BogoBots/scripts/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh \
+    && cp /app/BogoBots/scripts/register_ai_news_cron.sh /usr/local/bin/register-ai-news-cron \
+    && chmod +x /usr/local/bin/docker-entrypoint.sh /usr/local/bin/register-ai-news-cron
 
 RUN mkdir /app/BogoBots/static
 
@@ -29,4 +37,5 @@ EXPOSE 8601
 
 HEALTHCHECK CMD curl --fail http://localhost:8601/_stcore/health
 
-ENTRYPOINT ["streamlit", "run", "BogoBots.py", "--server.port=8601", "--server.address=0.0.0.0"]
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+CMD ["streamlit", "run", "BogoBots.py", "--server.port=8601", "--server.address=0.0.0.0"]
