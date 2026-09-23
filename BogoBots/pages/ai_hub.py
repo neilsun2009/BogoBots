@@ -471,6 +471,12 @@ if hub_section == SECTION_NEWS:
             default=[],
             key="news_tab_sources",
         )
+        news_list_mode = st.pills(
+            "List",
+            options=["Important", "Archived"],
+            default="Important",
+            key="ai_hub_news_list_mode",
+        )
         # filter_page_size = st.selectbox("Page size", [10, 20, 50], index=1, key="news_tab_page_size")
         
 
@@ -625,12 +631,6 @@ if hub_section == SECTION_NEWS:
                                 st.success("Remark updated.")
             display_pagination(key_suffix='bottom')
 
-    news_list_mode = st.pills(
-        "List",
-        options=["Important", "Archived"],
-        default="Important",
-        key="ai_hub_news_list_mode",
-    )
     render_news_list(
         archived=(news_list_mode == "Archived"),
         unread_only=(filter_type == 'Unread only'),
