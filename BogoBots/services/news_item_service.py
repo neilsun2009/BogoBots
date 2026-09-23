@@ -5,8 +5,8 @@ from datetime import datetime, timedelta, timezone
 from BogoBots.database.session import get_session
 from BogoBots.models.news_item import NewsItem
 from BogoBots.models.news_source import NewsSource
-from sqlalchemy.orm import joinedload
-from sqlalchemy import case
+from sqlalchemy.orm import joinedload, load_only
+from sqlalchemy import case, func
 
 
 class NewsItemService:
@@ -45,6 +45,19 @@ class NewsItemService:
                 NewsItem.published_at <= end_date,
                 NewsItem.relevance_score >= min_relevance
             ).order_by(NewsItem.published_at.desc()).all()
+        finally:
+            session.close()
+
+    @staticmethod
+    def count_items_by_date_range(start_date: datetime, end_date: datetime,
+                                  min_relevance: float = 0.0) -> int:
+        session = get_session()
+        try:
+            return session.query(func.count(NewsItem.id)).filter(
+                NewsItem.published_at >= start_date,
+                NewsItem.published_at <= end_date,
+                NewsItem.relevance_score >= min_relevance,
+            ).scalar() or 0
         finally:
             session.close()
     
@@ -172,32 +185,36 @@ class NewsItemService:
                 (NewsSource.priority == 'medium', 2),
                 else_=1
             )
-            query = session.query(NewsItem).join(
-                NewsSource, NewsItem.source_id == NewsSource.id
-            ).options(joinedload(NewsItem.source))
 
-            if unread_only:
-                query = query.filter(NewsItem.is_read == False)
-            if starred_only:
-                query = query.filter(NewsItem.is_starred == True)
-            if archived:
-                query = query.filter(NewsItem.is_archived == True)
-            else:
-                query = query.filter(NewsItem.is_archived == False)
-            if source_ids:
-                query = query.filter(NewsItem.source_id.in_(source_ids))
-            if news_types:
-                query = query.filter(NewsSource.news_type.in_(news_types))
-            if start_time:
-                query = query.filter(NewsItem.published_at >= start_time)
-            if end_time:
-                query = query.filter(NewsItem.published_at <= end_time)
-            if title_query:
-                keyword = title_query.strip()
-                if keyword:
-                    query = query.filter(NewsItem.title.ilike(f"%{keyword}%"))
+            def apply_filters(q):
+                if unread_only:
+                    q = q.filter(NewsItem.is_read == False)
+                if starred_only:
+                    q = q.filter(NewsItem.is_starred == True)
+                if archived:
+                    q = q.filter(NewsItem.is_archived == True)
+                else:
+                    q = q.filter(NewsItem.is_archived == False)
+                if source_ids:
+                    q = q.filter(NewsItem.source_id.in_(source_ids))
+                if news_types:
+                    q = q.filter(NewsSource.news_type.in_(news_types))
+                if start_time:
+                    q = q.filter(NewsItem.published_at >= start_time)
+                if end_time:
+                    q = q.filter(NewsItem.published_at <= end_time)
+                if title_query:
+                    keyword = title_query.strip()
+                    if keyword:
+                        q = q.filter(NewsItem.title.ilike(f"%{keyword}%"))
+                return q
 
-            total = query.count()
+            count_query = apply_filters(
+                session.query(func.count(NewsItem.id)).select_from(NewsItem).join(
+                    NewsSource, NewsItem.source_id == NewsSource.id
+                )
+            )
+            total = count_query.scalar() or 0
             total_pages = max(1, (total + page_size - 1) // page_size)
             page = max(1, min(page, total_pages))
             offset = (page - 1) * page_size
@@ -218,6 +235,34 @@ class NewsItemService:
                     NewsItem.relevance_score.desc(),
                 ]
 
+            query = apply_filters(
+                session.query(NewsItem).join(
+                    NewsSource, NewsItem.source_id == NewsSource.id
+                ).options(
+                    load_only(
+                        NewsItem.id,
+                        NewsItem.source_id,
+                        NewsItem.title,
+                        NewsItem.url,
+                        NewsItem.published_at,
+                        NewsItem.content_summary,
+                        NewsItem.audio_url,
+                        NewsItem.status,
+                        NewsItem.relevance_score,
+                        NewsItem.is_read,
+                        NewsItem.is_starred,
+                        NewsItem.is_archived,
+                        NewsItem.remarks,
+                    ),
+                    joinedload(NewsItem.source).load_only(
+                        NewsSource.id,
+                        NewsSource.name,
+                        NewsSource.news_type,
+                        NewsSource.priority,
+                        NewsSource.icon,
+                    ),
+                )
+            )
             items = query.order_by(*order_columns).offset(offset).limit(page_size).all()
 
             return {

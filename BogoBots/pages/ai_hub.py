@@ -409,13 +409,22 @@ with st.sidebar:
         render_unlock_form()
         
 
-# Main tabs
-tab_news, tab_crawl, tab_report, tab_config = st.tabs(
-    ["🆕 Latest News", "🔄 Crawling Status", "📬 Reports & Review", "⚙️ Config (Admin)", ]
-)
+# Streamlit still executes every st.tabs body on rerun. Use pills so only the
+# active section hits MySQL (star/read clicks were paying for all four tabs).
+SECTION_NEWS = "🆕 Latest News"
+SECTION_CRAWL = "🔄 Crawling Status"
+SECTION_REPORT = "📬 Reports & Review"
+SECTION_CONFIG = "⚙️ Config (Admin)"
+hub_section = st.pills(
+    "Section",
+    options=[SECTION_NEWS, SECTION_CRAWL, SECTION_REPORT, SECTION_CONFIG],
+    default=SECTION_NEWS,
+    key="ai_hub_section",
+    label_visibility="collapsed",
+) or SECTION_NEWS
 
 # ============= LATEST NEWS TAB =============
-with tab_news:
+if hub_section == SECTION_NEWS:
     st.subheader("Latest News Items")
     is_admin = st.session_state.get('access_level', 0) >= access_level['admin']
 
@@ -616,15 +625,19 @@ with tab_news:
                                 st.success("Remark updated.")
             display_pagination(key_suffix='bottom')
 
-    latest_subtab_important, latest_subtab_archived = st.tabs(["Important", "Archived"])
-
-    with latest_subtab_important:
-        render_news_list(archived=False, unread_only=(filter_type == 'Unread only'))
-    with latest_subtab_archived:
-        render_news_list(archived=True, unread_only=(filter_type == 'Unread only'))
+    news_list_mode = st.pills(
+        "List",
+        options=["Important", "Archived"],
+        default="Important",
+        key="ai_hub_news_list_mode",
+    )
+    render_news_list(
+        archived=(news_list_mode == "Archived"),
+        unread_only=(filter_type == 'Unread only'),
+    )
 
 # ============= CONFIG TAB =============
-with tab_config:
+elif hub_section == SECTION_CONFIG:
     if st.session_state.get('access_level', 0) < access_level['admin']:
         st.error("⚠️ Admin access required. Please unlock in the sidebar.")
     else:
@@ -1000,7 +1013,7 @@ with tab_config:
                 session.close()
 
 # ============= CRAWL TAB =============
-with tab_crawl:
+elif hub_section == SECTION_CRAWL:
     st.subheader("Crawling Status")
     
     sources = NewsSourceService.get_all_sources()
@@ -1014,11 +1027,11 @@ with tab_crawl:
         st.metric("Active Sources", len(active_sources))
     with col3:
         # Get recent items count
-        recent_items = NewsItemService.get_items_by_date_range(
+        recent_count = NewsItemService.count_items_by_date_range(
             datetime.now(timezone.utc) - timedelta(days=1),
             datetime.now(timezone.utc)
         )
-        st.metric("Items (24h)", len(recent_items))
+        st.metric("Items (24h)", recent_count)
     with col4:
         # Status breakdown
         status_counts = NewsItemService.get_item_count_by_status()
@@ -1134,7 +1147,7 @@ with tab_crawl:
         st.info("Admin access required for manual crawl.")
 
 # ============= REPORT TAB =============
-with tab_report:
+elif hub_section == SECTION_REPORT:
     st.header("AI News Reports")
     
     reports = NewsReportService.get_all_reports(limit=10)

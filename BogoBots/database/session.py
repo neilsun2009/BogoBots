@@ -1,13 +1,14 @@
 # BogoInsight/database/session.py
-import os
-from sqlalchemy import create_engine, event, text
+from contextlib import contextmanager
+
+from sqlalchemy import create_engine, text
+from sqlalchemy.engine.url import make_url
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.exc import OperationalError
 import streamlit as st
 
-from BogoBots.database.base import Base  # Import your Base from models
-from BogoBots.models import ( 
-    # Import all of your models, so that they can be created all at once
+from BogoBots.database.base import Base
+from BogoBots.models import (  # noqa: F401 — register models on Base.metadata
     book,
     news_source,
     news_item,
@@ -17,49 +18,64 @@ from BogoBots.models import (
 )
 
 
-# DATABASE_URL = f"postgresql://postgres.wggxwlhopitryatyprhk:{st.secrets['db_password']}@aws-0-ap-northeast-1.pooler.supabase.com:6543/postgres"
-DATABASE_URL = st.secrets['db_url']
+def _database_url():
+    url = make_url(st.secrets["db_url"])
+    if "charset" not in url.query:
+        url = url.update_query_dict({"charset": "utf8mb4"})
+    return url
 
-engine = create_engine(DATABASE_URL)
-Session = sessionmaker(bind=engine)
+
+engine = create_engine(
+    _database_url(),
+    pool_pre_ping=True,
+    pool_recycle=3600,
+    pool_size=10,
+    max_overflow=20,
+)
+Session = sessionmaker(bind=engine, expire_on_commit=False)
+
+_tables_ready = False
+
 
 def create_tables():
+    """Create missing tables once per process. Does not alter existing tables."""
+    global _tables_ready
+    if _tables_ready:
+        return
     try:
-        # Set the default character set for the database
-        with engine.connect() as connection:
-            connection.execute(text("SET CHARACTER SET utf8mb4"))
-            connection.execute(text("SET collation_connection = utf8mb4_unicode_ci"))
-        
-        table_args = {
-            'mysql_charset': 'utf8mb4',
-            'mysql_collate': 'utf8mb4_unicode_ci'
-        }
-        for table in Base.metadata.tables.values():
-            table.kwargs.update(table_args)
-            
         Base.metadata.create_all(bind=engine)
-        print("Database tables created.")
+        _tables_ready = True
     except OperationalError as e:
         print("Error occurred during Table creation!")
         print(e)
 
-create_tables()
 
 def get_session():
+    """Return a Session. Caller must close() it (or use `with get_session()`)."""
+    create_tables()
     return Session()
 
-def check_db_connection():
-    # Check connection
+
+@contextmanager
+def session_scope():
+    session = get_session()
     try:
-        db_session = Session()
-        print("Checking database connection...")
+        yield session
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+
+
+def check_db_connection():
+    try:
+        create_tables()
         with engine.connect() as connection:
-            print("Database connection established.")
-            return True
+            connection.execute(text("SELECT 1"))
+        return True
     except OperationalError as e:
         print(e)
         print("Database connection could not be established.")
         return False
-    finally:
-        # Close the session
-        db_session.close()
